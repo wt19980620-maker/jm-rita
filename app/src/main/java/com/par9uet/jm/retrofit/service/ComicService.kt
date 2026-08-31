@@ -1,0 +1,96 @@
+package com.par9uet.jm.retrofit.service
+
+import com.par9uet.jm.retrofit.model.CollectComicResponse
+import com.par9uet.jm.retrofit.model.ComicCategoryListResponse
+import com.par9uet.jm.retrofit.model.ComicDetailResponse
+import com.par9uet.jm.retrofit.model.ComicFilterListResponse
+import com.par9uet.jm.retrofit.model.ComicListResponse
+import com.par9uet.jm.retrofit.model.CommentComicResponse
+import com.par9uet.jm.retrofit.model.CommentListResponse
+import com.par9uet.jm.retrofit.model.HomeSwiperComicListItemResponse
+import com.par9uet.jm.retrofit.model.LikeComicResponse
+import com.par9uet.jm.retrofit.model.ResponseWrapper
+import com.par9uet.jm.retrofit.model.WeekRecommendComicResponse
+import com.par9uet.jm.retrofit.model.WeekResponse
+import retrofit2.http.GET
+import retrofit2.http.Multipart
+import retrofit2.http.POST
+import retrofit2.http.Part
+import retrofit2.http.Query
+
+interface ComicService {
+
+    @GET("album")
+    suspend fun getComicDetail(
+        @Query("id") id: Int,
+    ): ResponseWrapper<ComicDetailResponse>
+
+    @POST("like")
+    @Multipart
+    suspend fun likeComic(
+        @Part("id") id: Int,
+    ): ResponseWrapper<LikeComicResponse>
+
+    @POST("favorite")
+    @Multipart
+    suspend fun collectComic(
+        @Part("aid") id: Int,
+    ): ResponseWrapper<CollectComicResponse>
+
+    @GET("promote")
+    suspend fun getHomeSwiperComicList(): ResponseWrapper<List<HomeSwiperComicListItemResponse>>
+
+    @GET("chapter_view_template")
+    suspend fun getComicPicList(
+        @Query("id") id: Int,
+        // TODO 图片设置
+        @Query("app_img_shunt") shunt: String,
+        @Query("mode") mode: String = "vertical",
+        @Query("page") page: Int = 0,
+        @Query("express") express: String = "off",
+        @Query("v") v: Long = System.currentTimeMillis() / 1000,
+    ): String
+
+    @GET("search")
+    suspend fun getComicList(
+        @Query("page") page: Int,
+        @Query("o") order: String,
+        @Query("search_query") searchContent: String,
+    ): ResponseWrapper<ComicListResponse>
+
+    @GET("week")
+    suspend fun getWeekData(): ResponseWrapper<WeekResponse>
+
+    @GET("week/filter")
+    suspend fun getWeekRecommendComicList(
+        @Query("page") page: Int,
+        @Query("id") categoryId: String,
+        @Query("type") typeId: String,
+    ): ResponseWrapper<WeekRecommendComicResponse>
+
+    @GET("forum")
+    suspend fun getCommentList(
+        @Query("page") page: Int,
+        @Query("aid") comicId: Int,
+        @Query("mode") mode: String = "manhua",
+    ): ResponseWrapper<CommentListResponse>
+
+    @POST("comment")
+    @Multipart
+    suspend fun comment(
+        @Part("comment") content: String,
+        @Part("aid") id: Int,
+        @Part("status") status: String, // TODO 是否剧透
+        @Part("comment_id") commentId: Int? = null,
+    ): ResponseWrapper<CommentComicResponse>
+
+    @GET("categories/filter")
+    suspend fun getComicFilterList(
+        @Query("page") page: Int,
+        @Query("c") category: String,
+        @Query("o") order: String,
+    ): ResponseWrapper<ComicFilterListResponse>
+
+    @GET("categories")
+    suspend fun getCategoryList(): ResponseWrapper<ComicCategoryListResponse>
+}
