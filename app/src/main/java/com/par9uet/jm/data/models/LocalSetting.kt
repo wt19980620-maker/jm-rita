@@ -15,6 +15,8 @@ data class LocalSetting(
         "dark",
     ),
     val theme: String = "auto",
+    // 可空用于兼容尚未保存该字段的旧版设置数据
+    val colorPalette: String? = null,
     // 阅读页预先加载的图片张数
     val prefetchCount: Int = 3,
     val showComicScrollReadTip: Boolean = true,

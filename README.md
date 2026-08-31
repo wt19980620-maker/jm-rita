@@ -15,6 +15,7 @@ JM RITA 是面向 Android 的原生漫画阅读客户端，内容入口标识为
 - 漫画代码直达：支持纯数字以及 `JM123456`、`JM # 123456` 格式
 - 漫画详情、章节目录、滚动/分页阅读、阅读历史、分类搜索和每周推荐
 - 多 API 线路与图片分流切换
+- 支持跟随系统、浅色和深色显示模式，并可切换琥珀、海盐蓝和樱花粉配色
 - 原生无广告界面：无 WebView、无 AdMob 等广告依赖
 
 ## 隐私与安全
@@ -44,7 +45,7 @@ Windows 构建命令：
 APK 输出到：
 
 ```text
-app/build/outputs/apk/debug/jm-rita_v1.1.0_<git-hash-or-local>.apk
+app/build/outputs/apk/debug/jm-rita_v1.2.0_<git-hash-or-local>.apk
 ```
 
 Debug APK 使用 Android Debug Key 签名，可直接侧载测试；如需公开分发，应使用你自己的发布密钥构建 Release APK，并自行维护密钥。

@@ -5,9 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import com.par9uet.jm.store.LocalSettingManager
 import org.koin.compose.getKoin
@@ -32,35 +30,15 @@ fun AppTheme(
     localSettingManager: LocalSettingManager = getKoin().get(),
     content: @Composable () -> Unit
 ) {
-    val localSettingState = localSettingManager.localSettingState.collectAsState()
-    val theme by remember {
-        derivedStateOf {
-            localSettingState.value.theme
-        }
+    val localSetting by localSettingManager.localSettingState.collectAsState()
+    val systemInDarkTheme = isSystemInDarkTheme()
+    val isDarkTheme = when (localSetting.theme) {
+        "light" -> false
+        "dark" -> true
+        else -> systemInDarkTheme
     }
-    val colorScheme = when (theme) {
-        "auto" -> {
-            val isDark = isSystemInDarkTheme()
-            if (isDark) darkScheme else lightScheme
-        }
-
-        "light" -> lightScheme
-        "dark" -> darkScheme
-
-        else -> lightScheme
-    }
-
-    val extendedColorScheme = when (theme) {
-        "auto" -> {
-            val isDark = isSystemInDarkTheme()
-            if (isDark) extendedDark else extendedLight
-        }
-
-        "light" -> extendedLight
-        "dark" -> extendedDark
-
-        else -> extendedLight
-    }
+    val colorScheme = themeColorScheme(localSetting.colorPalette, isDarkTheme)
+    val extendedColorScheme = if (isDarkTheme) extendedDark else extendedLight
 
     CompositionLocalProvider(LocalExtendedColors provides extendedColorScheme) {
         MaterialTheme(

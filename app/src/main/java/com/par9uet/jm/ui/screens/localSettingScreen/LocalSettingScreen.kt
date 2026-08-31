@@ -23,6 +23,7 @@ fun LocalSettingScreen() {
                 }
             )
             ThemeSettingListItem()
+            ColorPaletteSettingListItem()
             ApiSettingListItem()
         }
     }

@@ -27,8 +27,8 @@ import org.koin.compose.getKoin
 
 private val themeTextMap = mapOf(
     "auto" to "跟随系统",
-    "light" to "日间模式",
-    "dark" to "夜间模式",
+    "light" to "浅色模式",
+    "dark" to "深色模式",
 )
 
 private val themeIconMap = mapOf(
@@ -49,10 +49,10 @@ fun ThemeSettingListItem(
             expanded = true
         },
         headlineContent = {
-            Text("主题")
+            Text("显示模式")
         },
         supportingContent = {
-            Text(themeTextMap[localSetting.theme]!!)
+            Text(themeTextMap[localSetting.theme] ?: themeTextMap.getValue("auto"))
         },
         trailingContent = {
             ExposedDropdownMenuBox(
@@ -88,6 +88,7 @@ fun ThemeSettingListItem(
                             },
                             onClick = {
                                 localSettingManager.updateTheme(theme)
+                                expanded = false
                             }
                         )
                     }

@@ -33,6 +33,15 @@ class LocalSettingManager(
         localSettingStorage.set(_localSettingState.value)
     }
 
+    fun updateColorPalette(colorPalette: String) {
+        _localSettingState.update {
+            it.copy(
+                colorPalette = colorPalette
+            )
+        }
+        localSettingStorage.set(_localSettingState.value)
+    }
+
     fun updateShunt(shunt: String) {
         _localSettingState.update {
             it.copy(
