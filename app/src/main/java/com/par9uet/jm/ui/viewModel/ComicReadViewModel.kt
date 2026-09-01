@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import coil.ImageLoader
 import com.par9uet.jm.data.models.ComicPicImageState
+import com.par9uet.jm.database.dao.DownloadComicDao
 import com.par9uet.jm.repository.ComicRepository
 import com.par9uet.jm.retrofit.model.ComicPicListResponse
 import com.par9uet.jm.retrofit.model.NetWorkResult
@@ -28,11 +29,13 @@ import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.Duration.Companion.milliseconds
+import java.io.File
 
 class ComicReadViewModel(
     private val comicRepository: ComicRepository,
     private val picImageLoader: ImageLoader,
     private val localSettingManager: LocalSettingManager,
+    private val downloadComicDao: DownloadComicDao,
 ) : ViewModel() {
     var isShowToolBar = mutableStateOf(false)
     private var hideToolBarJob: Job? = null
@@ -61,7 +64,36 @@ class ComicReadViewModel(
                     errorMsg = ""
                 )
             }
-            when (val data = comicRepository.getComicPicList(comicId, shunt)) {
+            val localDownload = downloadComicDao.getById(comicId)
+            val localPages = localDownload
+                ?.takeIf { it.status == "complete" && it.zipPath.isNotBlank() }
+                ?.let {
+                    File(it.zipPath).let { path ->
+                        if (path.isDirectory) path else path.parentFile?.resolve(comicId.toString())
+                    }
+                }
+                ?.listFiles { file -> file.isFile && file.extension == "webp" }
+                ?.sortedBy { it.name }
+                .orEmpty()
+            if (localPages.isNotEmpty()) {
+                val localImageStates = localPages.mapIndexed { index, file ->
+                    ComicPicImageState(
+                        index = index,
+                        comicId = comicId,
+                        originSrc = file.absolutePath,
+                        __scrambleId = Int.MAX_VALUE,
+                        __speed = "1",
+                        picImageLoader = picImageLoader,
+                    )
+                }
+                localImageStates.firstOrNull()?.decodeLocalFile()
+                _comicPicState.update {
+                    it.copy(
+                        data = localImageStates
+                    )
+                }
+                _refreshComicPicTrigger.emit(Unit)
+            } else when (val data = comicRepository.getComicPicList(comicId, shunt)) {
                 is NetWorkResult.Error -> {
                     _comicPicState.update {
                         it.copy(

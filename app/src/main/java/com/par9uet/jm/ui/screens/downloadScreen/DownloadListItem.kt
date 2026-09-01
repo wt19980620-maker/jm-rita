@@ -8,12 +8,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -60,12 +65,13 @@ private fun ComicCoverImage(
 @Composable
 fun DownloadListItem(
     modifier: Modifier = Modifier,
-    comic: DownloadComic
+    comic: DownloadComic,
+    onClick: () -> Unit,
+    onRetry: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Card(
-        onClick = {
-            // TODO
-        }
+        onClick = onClick
     ) {
         Box(modifier = modifier) {
             Column(
@@ -138,7 +144,7 @@ fun DownloadListItem(
                             color = MaterialTheme.colorScheme.surface
                         )
                         TextButton(onClick = {
-                            // TODO
+                            onRetry()
                         }) {
                             Text("重新下载")
                         }
@@ -149,6 +155,19 @@ fun DownloadListItem(
                 else -> {
 
                 }
+            }
+            IconButton(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                onClick = onDelete,
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "删除下载",
+                    tint = Color.White,
+                )
             }
         }
     }

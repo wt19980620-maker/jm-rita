@@ -2,6 +2,7 @@ package com.par9uet.jm.worker
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.core.graphics.drawable.toBitmap
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -10,6 +11,8 @@ import coil.request.ErrorResult
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.par9uet.jm.cache.getDownloadDir
+import com.par9uet.jm.data.models.ComicPicImageState
+import com.par9uet.jm.data.models.ImageResultState
 import com.par9uet.jm.database.dao.DownloadComicDao
 import com.par9uet.jm.database.model.UpdateComicCover
 import com.par9uet.jm.database.model.UpdateComicProgress
@@ -22,13 +25,12 @@ import com.par9uet.jm.store.LocalSettingManager
 import com.par9uet.jm.store.RemoteSettingManager
 import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.utils.tryCreateDir
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
+import java.io.IOException
 
 class DownloadComicWorker(
     private val appContext: Context,
@@ -38,6 +40,7 @@ class DownloadComicWorker(
     private val localSettingManager: LocalSettingManager,
     private val comicRepository: ComicRepository,
     private val toastManager: ToastManager,
+    private val imageLoader: ImageLoader,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -59,13 +62,12 @@ class DownloadComicWorker(
                     coverPath
                 )
             )
-            val picPathList =
-                downloadPicList(comicId, localSettingManager.localSettingState.value.shunt)
-            val zipPath = zipPicPathList(comicId, picPathList)
+            downloadPicList(comicId, localSettingManager.localSettingState.value.shunt)
+            val downloadPath = getComicPicListDownloadDir(comicId).absolutePath
             downloadComicDao.updateZipPath(
                 UpdateComicZipPath(
                     comicId,
-                    zipPath
+                    downloadPath
                 )
             )
             downloadComicDao.updateStatus(
@@ -76,10 +78,15 @@ class DownloadComicWorker(
             )
             toastManager.showAsync("下载成功")
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             if (runAttemptCount < 3) {
-                Result.retry() // 如果失败了，系统会自动尝试重试
+                downloadComicDao.updateStatus(UpdateComicStatus(comicId, "pending"))
+                Result.retry()
             } else {
+                downloadComicDao.updateStatus(UpdateComicStatus(comicId, "error"))
+                toastManager.showAsync("下载失败，可在我的下载中重试")
                 Result.failure()
             }
         }
@@ -89,15 +96,13 @@ class DownloadComicWorker(
         return withContext(Dispatchers.IO) {
             val coverUrl =
                 "${remoteSettingManager.remoteSettingState.value.imgHost}/media/albums/${comicId}_3x4.jpg"
-            val loader = ImageLoader(appContext)
             val request = ImageRequest.Builder(appContext)
                 .data(coverUrl)
                 .allowHardware(false)
                 .build()
 
-            when (val result = loader.execute(request)) {
+            when (val result = imageLoader.execute(request)) {
                 is ErrorResult -> {
-                    // TODO 处理错误
                     ""
                 }
 
@@ -118,28 +123,37 @@ class DownloadComicWorker(
         return withContext(Dispatchers.IO) {
             when (val data = comicRepository.getComicPicList(comicId, shunt)) {
                 is NetWorkResult.Error -> {
-                    // TODO
-                    listOf()
+                    throw IOException(data.message)
                 }
 
                 is NetWorkResult.Success<ComicPicListResponse> -> {
+                    if (data.data.list.isEmpty()) {
+                        throw IOException("漫画图片列表为空")
+                    }
                     val dir = getComicPicListDownloadDir(comicId)
+                    dir.listFiles()?.forEach { it.delete() }
                     data.data.list.mapIndexed { index, url ->
-                        val loader = ImageLoader(appContext)
-                        val request = ImageRequest.Builder(appContext)
-                            .data(url)
-                            .allowHardware(false)
-                            .build()
-
-                        when (val result = loader.execute(request)) {
-                            is ErrorResult -> {
-                                // TODO 处理错误
-                                ""
+                        val imageState = ComicPicImageState(
+                            index = index,
+                            comicId = comicId,
+                            originSrc = url,
+                            __scrambleId = data.data.__scrambleId,
+                            __speed = data.data.__speed,
+                            picImageLoader = imageLoader,
+                        )
+                        imageState.decode(appContext)
+                        when (val result = imageState.imageResultState) {
+                            is ImageResultState.Failure -> {
+                                throw IOException("第 ${index + 1} 页下载失败：${result.reason}")
                             }
 
-                            is SuccessResult -> {
-                                val bitmap = result.drawable.toBitmap()
-                                val file = File(dir, "$index.webp")
+                            ImageResultState.Loading -> {
+                                throw IOException("第 ${index + 1} 页下载未完成")
+                            }
+
+                            is ImageResultState.Success -> {
+                                val bitmap = result.decodeImageBitmap.asAndroidBitmap()
+                                val file = File(dir, "offline_%05d.webp".format(index))
                                 FileOutputStream(file).use { out ->
                                     bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)
                                 }
@@ -156,25 +170,6 @@ class DownloadComicWorker(
                 }
             }
         }
-    }
-
-    private fun zipPicPathList(comicId: Int, picPathList: List<String>): String {
-        val zipFile = File(getDownloadDir(appContext), "$comicId.zip")
-        ZipOutputStream(FileOutputStream(zipFile)).use { zipOut ->
-            picPathList.forEach { source ->
-                val file = File(source)
-                if (file.exists()) {
-                    val entryName = "$comicId/${file.name}"
-                    val zipEntry = ZipEntry(entryName)
-                    zipOut.putNextEntry(zipEntry)
-                    FileInputStream(file).use { fis ->
-                        fis.copyTo(zipOut)
-                    }
-                    zipOut.closeEntry()
-                }
-            }
-        }
-        return zipFile.absolutePath
     }
 
     private fun getComicPicListDownloadDir(comicId: Int): File {

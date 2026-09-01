@@ -6,6 +6,8 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.cachedIn
 import com.par9uet.jm.database.dao.DownloadComicDao
+import com.par9uet.jm.database.model.DownloadComic
+import com.par9uet.jm.store.DownloadManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,7 +19,8 @@ data class DownloadFilter(
 )
 
 class DownloadViewModel(
-    private val downloadComicDao: DownloadComicDao
+    private val downloadComicDao: DownloadComicDao,
+    private val downloadManager: DownloadManager,
 ) : ViewModel() {
     private val _downloadFilterState = MutableStateFlow(DownloadFilter("downloading"))
     val downloadFilterState = _downloadFilterState.asStateFlow()
@@ -28,6 +31,14 @@ class DownloadViewModel(
                 status = status
             )
         }
+    }
+
+    fun retryDownload(comic: DownloadComic) {
+        downloadManager.retryDownload(comic)
+    }
+
+    fun deleteDownload(comic: DownloadComic) {
+        downloadManager.deleteDownload(comic)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

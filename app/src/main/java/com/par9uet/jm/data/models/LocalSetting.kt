@@ -1,5 +1,7 @@
 package com.par9uet.jm.data.models
 
+import com.par9uet.jm.config.SOURCE_WEBSITE
+
 data class LocalSetting(
     val apiList: List<String> = listOf(
         "https://www.cdnhth.club",
@@ -9,6 +11,8 @@ data class LocalSetting(
         "https://www.jmeadpoolcdn.life"
     ),
     val api: String = apiList[0],
+    // 可空用于兼容尚未保存该字段的旧版设置数据
+    val sourceWebsite: String? = SOURCE_WEBSITE,
     val themeList: List<String> = listOf(
         "auto",
         "light",

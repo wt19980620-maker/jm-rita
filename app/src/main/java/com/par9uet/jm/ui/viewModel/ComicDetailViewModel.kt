@@ -14,6 +14,7 @@ import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.ui.models.CommonUIState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -23,6 +24,8 @@ class ComicDetailViewModel(
     private val downloadComicDao: DownloadComicDao,
     private val remoteSettingManager: RemoteSettingManager,
 ) : ViewModel() {
+    fun observeDownloaded(id: Int): Flow<Boolean> = downloadComicDao.isExist(id)
+
     private val _comicDetailState = MutableStateFlow<CommonUIState<Comic>>(
         CommonUIState(
             isLoading = true,

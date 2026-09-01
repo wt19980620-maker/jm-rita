@@ -18,7 +18,7 @@ jobs:
       - name: setup
         uses: actions/setup-java@v5
         with:
-          java-version: '25'
+          java-version: '17'
           distribution: 'temurin'
           cache: gradle
 
@@ -37,15 +37,20 @@ jobs:
           -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
           -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
 
+      - name: 创建固定名称的最新版安装包
+        run: cp "$(find app/build/outputs/apk/release -name '*.apk' -print -quit)" jm-rita-latest.apk
+
       - name: 自动创建 Release 并上传文件
         uses: softprops/action-gh-release@v2
         with:
           body: |
-            详细变更请查看 [CHANGELOG](https://github.com/Dedicatus546/jm-mobile/blob/main/CHANGELOG.md) 。
-          files: app/build/outputs/apk/release/*.apk
+            详细变更请查看 [CHANGELOG](https://github.com/wt19980620-maker/jm-rita/blob/main/CHANGELOG.md) 。
+          files: |
+            app/build/outputs/apk/release/*.apk
+            jm-rita-latest.apk
           generate_release_notes: false
           name: "Release ${{ github.ref_name }}"
-          draft: true
+          draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

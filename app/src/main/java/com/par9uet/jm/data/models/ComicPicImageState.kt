@@ -54,13 +54,35 @@ class ComicPicImageState(
     var imageResultState by mutableStateOf<ImageResultState>(ImageResultState.Loading)
 
     suspend fun decode(context: Context) {
+        if (imageResultState is ImageResultState.Success) {
+            return
+        }
         withContext(Dispatchers.Default) {
             imageResultState = ImageResultState.Loading
             decodeImage(context)
         }
     }
 
+    suspend fun decodeLocalFile(): Boolean = withContext(Dispatchers.IO) {
+        val file = File(originSrc)
+        if (!file.isFile) {
+            return@withContext false
+        }
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: run {
+            imageResultState = ImageResultState.Failure("本地图片已损坏")
+            return@withContext true
+        }
+        imageResultState = ImageResultState.Success(
+            decodeImageBitmap = bitmap.asImageBitmap(),
+            decodeImageAspectRatio = bitmap.width.toFloat() / bitmap.height,
+        )
+        true
+    }
+
     private suspend fun decodeImage(context: Context) {
+        if (decodeLocalFile()) {
+            return
+        }
         val cacheDir = getCommonPicDecodeCacheDir(context, comicId)
         if (!cacheDir.exists()) {
             cacheDir.mkdirs()

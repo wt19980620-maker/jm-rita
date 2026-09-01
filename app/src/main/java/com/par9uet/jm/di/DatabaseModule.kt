@@ -21,7 +21,7 @@ val databaseModule = module {
     }
     single { get<AppDatabase>().downloadComicDao() }
     single { DownloadManager(get(), get(), get(), get()) }
-    viewModel { DownloadViewModel(get()) }
+    viewModel { DownloadViewModel(get(), get()) }
 
-    worker { DownloadComicWorker(get(), get(), get(), get(), get(), get(), get()) }
+    worker { DownloadComicWorker(get(), get(), get(), get(), get(), get(), get(), get()) }
 }

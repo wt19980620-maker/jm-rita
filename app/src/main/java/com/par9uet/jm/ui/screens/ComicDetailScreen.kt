@@ -31,6 +31,8 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.RemoveRedEye
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -49,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -228,6 +231,9 @@ fun ComicDetailScreen(
     val likeComicState by comicDetailViewModel.likeComicState.collectAsState()
     val collectComicState by comicDetailViewModel.collectComicState.collectAsState()
     val isLogin by userManager.isLoginState.collectAsState(false)
+    val isDownloaded by remember(id) {
+        comicDetailViewModel.observeDownloaded(id)
+    }.collectAsState(false)
 
     LaunchedEffect(Unit) {
         if (comicDetailState.data != null) {
@@ -347,16 +353,21 @@ fun ComicDetailScreen(
                                 contentDescription = "相关本子",
                             )
                         }
-//                        IconButton(
-//                            onClick = {
-//                                downloadManager.downloadComic(comic)
-//                            },
-//                        ) {
-//                            Icon(
-//                                imageVector = Icons.Default.Download,
-//                                contentDescription = "下载",
-//                            )
-//                        }
+                        IconButton(
+                            enabled = !isDownloaded,
+                            onClick = {
+                                downloadManager.downloadComic(comic)
+                            },
+                        ) {
+                            Icon(
+                                imageVector = if (isDownloaded) {
+                                    Icons.Default.DownloadDone
+                                } else {
+                                    Icons.Default.Download
+                                },
+                                contentDescription = if (isDownloaded) "已加入下载" else "下载",
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.weight(1f))
                     if (comic.comicChapterList.isEmpty()) {

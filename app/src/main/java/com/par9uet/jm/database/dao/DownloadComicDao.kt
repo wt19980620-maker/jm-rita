@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DownloadComicDao {
-    @Query("SELECT * FROM download_comics WHERE status = 'pending' OR status = 'downloading' ORDER BY createTime DESC")
+    @Query("SELECT * FROM download_comics WHERE status IN ('pending', 'downloading', 'error') ORDER BY createTime DESC")
     fun getDownloadingList(): PagingSource<Int, DownloadComic>
 
     @Query("SELECT * FROM download_comics WHERE status = 'complete' ORDER BY createTime DESC")
@@ -24,6 +24,9 @@ interface DownloadComicDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM download_comics WHERE id = :comicId)")
     fun isExist(comicId: Int): Flow<Boolean>
+
+    @Query("SELECT * FROM download_comics WHERE id = :comicId LIMIT 1")
+    suspend fun getById(comicId: Int): DownloadComic?
 
     @Update(entity = DownloadComic::class)
     suspend fun updateCover(updateComicCover: UpdateComicCover)

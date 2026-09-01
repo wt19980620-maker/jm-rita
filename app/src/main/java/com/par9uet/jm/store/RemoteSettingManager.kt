@@ -21,7 +21,7 @@ class RemoteSettingManager(
 
     private var appTaskInfo = AppTaskInfo(
         taskName = "加载 app 远端应用数据",
-        sort = 2,
+        sort = 3,
     )
 
     private suspend fun getRemoteSetting() {

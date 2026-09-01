@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Savings
 import androidx.compose.material3.HorizontalDivider
@@ -216,6 +217,13 @@ fun UserScreen(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
+                MenuItem(
+                    icon = Icons.Default.Download,
+                    label = "我的下载",
+                    onClick = {
+                        mainNavController.navigate("download")
+                    }
+                )
                 MenuItem(
                     icon = Icons.Default.Bookmarks,
                     label = "我的收藏",

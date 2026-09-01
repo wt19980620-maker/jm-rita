@@ -4,6 +4,9 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.Strictness
 import com.par9uet.jm.repository.RemoteSettingRepository
+import com.par9uet.jm.repository.SourceDomainResolver
+import com.par9uet.jm.repository.ApiLineProbe
+import com.par9uet.jm.repository.GitHubUpdateRepository
 import com.par9uet.jm.repository.impl.RemoteSettingRepositoryImpl
 import com.par9uet.jm.storage.CookieStorage
 import com.par9uet.jm.storage.HistorySearchStorage
@@ -11,6 +14,7 @@ import com.par9uet.jm.storage.LocalSettingStorage
 import com.par9uet.jm.storage.SecureStorage
 import com.par9uet.jm.storage.UserStorage
 import com.par9uet.jm.store.HistorySearchManager
+import com.par9uet.jm.store.AppUpdateManager
 import com.par9uet.jm.store.InitManager
 import com.par9uet.jm.store.LocalSettingManager
 import com.par9uet.jm.store.RemoteSettingManager
@@ -44,9 +48,13 @@ val appModule = module {
 
     single { UserManager(get(), get(), get(), get()) } bind AppInitTask::class
     single { RemoteSettingManager(get()) } bind AppInitTask::class
-    single { LocalSettingManager(get()) } bind AppInitTask::class
+    single { SourceDomainResolver() }
+    single { ApiLineProbe() }
+    single { GitHubUpdateRepository(get()) }
+    single { LocalSettingManager(get(), get(), get(), get()) } bind AppInitTask::class
     single { HistorySearchManager(get()) } bind AppInitTask::class
     single { ToastManager() }
+    single { AppUpdateManager(get(), get(), get(), get()) }
     single { InitManager() }
 
     single<Gson> { GsonBuilder().setStrictness(Strictness.LENIENT).serializeNulls().create() }

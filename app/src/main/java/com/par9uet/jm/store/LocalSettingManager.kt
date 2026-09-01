@@ -2,18 +2,80 @@ package com.par9uet.jm.store
 
 import com.par9uet.jm.data.models.LocalSetting
 import com.par9uet.jm.storage.LocalSettingStorage
+import com.par9uet.jm.repository.SourceDomainResolver
+import com.par9uet.jm.repository.ApiLineCheck
+import com.par9uet.jm.repository.ApiLineProbe
+import com.par9uet.jm.repository.ApiLineSelector
 import com.par9uet.jm.task.AppInitTask
 import com.par9uet.jm.task.AppTaskInfo
 import com.par9uet.jm.utils.log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class LocalSettingManager(
-    private val localSettingStorage: LocalSettingStorage
+    private val localSettingStorage: LocalSettingStorage,
+    private val sourceDomainResolver: SourceDomainResolver,
+    private val apiLineProbe: ApiLineProbe,
+    private val scope: CoroutineScope,
 ) : AppInitTask {
     private val _localSettingState = MutableStateFlow(LocalSetting())
     val localSettingState = _localSettingState.asStateFlow()
+    private val sourceWebsiteRefreshMutex = Mutex()
+    private val _isSourceWebsiteRefreshing = MutableStateFlow(false)
+    val isSourceWebsiteRefreshing = _isSourceWebsiteRefreshing.asStateFlow()
+    private val apiLineRefreshMutex = Mutex()
+    private val _apiLineChecks = MutableStateFlow<List<ApiLineCheck>>(emptyList())
+    val apiLineChecks = _apiLineChecks.asStateFlow()
+    private val _isApiLineRefreshing = MutableStateFlow(false)
+    val isApiLineRefreshing = _isApiLineRefreshing.asStateFlow()
+
+    suspend fun refreshApiLines(): Boolean = apiLineRefreshMutex.withLock {
+        _isApiLineRefreshing.value = true
+        try {
+            val checks = coroutineScope {
+                _localSettingState.value.apiList.distinct().map { api ->
+                    async(Dispatchers.IO) { apiLineProbe.check(api) }
+                }.awaitAll()
+            }
+            _apiLineChecks.value = checks
+            val selectedApi = ApiLineSelector.choose(_localSettingState.value.api, checks)
+                ?: return@withLock false
+            if (selectedApi != _localSettingState.value.api) {
+                updateApi(selectedApi)
+                log("当前 API 不可用，已自动切换至：$selectedApi")
+            }
+            true
+        } finally {
+            _isApiLineRefreshing.value = false
+        }
+    }
+
+    suspend fun refreshSourceWebsite(): Boolean = sourceWebsiteRefreshMutex.withLock {
+        _isSourceWebsiteRefreshing.value = true
+        try {
+            val website = sourceDomainResolver.resolve() ?: return@withLock false
+            if (_localSettingState.value.sourceWebsite != website) {
+                _localSettingState.update { it.copy(sourceWebsite = website) }
+                localSettingStorage.set(_localSettingState.value)
+                log("已切换内容站点域名：$website")
+            }
+            true
+        } catch (e: Exception) {
+            log("自动检索内容站点域名失败：${e.message}")
+            false
+        } finally {
+            _isSourceWebsiteRefreshing.value = false
+        }
+    }
 
     fun updateApi(api: String) {
         _localSettingState.update {
@@ -134,7 +196,7 @@ class LocalSettingManager(
 
     private var appTaskInfo = AppTaskInfo(
         taskName = "加载本地 APP 设置",
-        sort = 3,
+        sort = 2,
     )
 
     override suspend fun init() {
@@ -144,6 +206,10 @@ class LocalSettingManager(
             localSettingStorage.get()
         }
         log("已加载本地应用设置")
+        refreshApiLines()
+        scope.launch(Dispatchers.IO) {
+            refreshSourceWebsite()
+        }
         log("本地应用设置初始化结束")
     }
 
