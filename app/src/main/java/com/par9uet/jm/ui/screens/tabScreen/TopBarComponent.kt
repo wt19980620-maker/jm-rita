@@ -96,6 +96,24 @@ private fun UserTopBarComponent() {
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun VideoTopBarComponent() {
+    TopAppBar(
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.primary
+        ),
+        title = {
+            Text(
+                "视频",
+                color = MaterialTheme.colorScheme.surface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+    )
+}
+
 @Composable
 fun TopBarComponent() {
     val tabNavController = LocalTabNavController.current
@@ -103,6 +121,7 @@ fun TopBarComponent() {
     val currentRoute = backStackEntryState?.destination?.route
     when (currentRoute) {
         BottomNav.Home.route -> HomeTopBarComponent()
+        BottomNav.Video.route -> VideoTopBarComponent()
         BottomNav.User.route -> UserTopBarComponent()
         else -> {}
     }

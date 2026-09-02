@@ -3,6 +3,7 @@ package com.par9uet.jm.ui.screens.tabScreen
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -31,6 +32,7 @@ fun BottomNavigationBarComponent() {
                             contentDescription = it.label
                         )
                     },
+                    label = { Text(it.label) },
                     selected = currentRoute == it.route,
                     onClick = {
                         navigate(it.route)

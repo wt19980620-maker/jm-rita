@@ -7,9 +7,11 @@ import com.par9uet.jm.repository.RemoteSettingRepository
 import com.par9uet.jm.repository.SourceDomainResolver
 import com.par9uet.jm.repository.ApiLineProbe
 import com.par9uet.jm.repository.GitHubUpdateRepository
+import com.par9uet.jm.repository.PornhubVideoRepository
 import com.par9uet.jm.repository.impl.RemoteSettingRepositoryImpl
 import com.par9uet.jm.storage.CookieStorage
 import com.par9uet.jm.storage.HistorySearchStorage
+import com.par9uet.jm.storage.AdultContentConsentStorage
 import com.par9uet.jm.storage.LocalSettingStorage
 import com.par9uet.jm.storage.SecureStorage
 import com.par9uet.jm.storage.UserStorage
@@ -22,6 +24,7 @@ import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.store.UserManager
 import com.par9uet.jm.task.AppInitTask
 import com.par9uet.jm.ui.viewModel.GlobalViewModel
+import com.par9uet.jm.ui.viewModel.VideoViewModel
 import com.par9uet.jm.utils.log
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +46,7 @@ val appModule = module {
     single { CookieStorage(get()) }
     single { LocalSettingStorage(get()) }
     single { HistorySearchStorage(get()) }
+    single { AdultContentConsentStorage(get()) }
 
     single { RemoteSettingRepositoryImpl(get(), get()) } bind RemoteSettingRepository::class
 
@@ -51,6 +55,7 @@ val appModule = module {
     single { SourceDomainResolver() }
     single { ApiLineProbe() }
     single { GitHubUpdateRepository(get()) }
+    single { PornhubVideoRepository(get()) }
     single { LocalSettingManager(get(), get(), get(), get()) } bind AppInitTask::class
     single { HistorySearchManager(get()) } bind AppInitTask::class
     single { ToastManager() }
@@ -60,4 +65,5 @@ val appModule = module {
     single<Gson> { GsonBuilder().setStrictness(Strictness.LENIENT).serializeNulls().create() }
 
     viewModel { GlobalViewModel(getAll(), get()) }
+    viewModel { VideoViewModel(get(), get()) }
 }
