@@ -16,5 +16,7 @@ JM RITA 的主要修改：
 - 修复源码压缩包或非 Git 环境下构建失败的问题
 - 增加代码解析单元测试、构建文档与隐私说明
 - 增加搜索记录单条删除与“搜索盲盒”随机历史搜索
+- 动漫模块的源目录与解析规则参考 Yūzōnō Anime Extensions（Apache-2.0）：
+  https://github.com/yuzono/anime-extensions
 
 完整衍生源码继续按照仓库根目录的 `LICENSE` 以 GPL-3.0 发布。
