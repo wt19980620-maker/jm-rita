@@ -7,7 +7,6 @@ import com.par9uet.jm.repository.RemoteSettingRepository
 import com.par9uet.jm.repository.SourceDomainResolver
 import com.par9uet.jm.repository.ApiLineProbe
 import com.par9uet.jm.repository.GitHubUpdateRepository
-import com.par9uet.jm.repository.AnimeRepository
 import com.par9uet.jm.repository.impl.RemoteSettingRepositoryImpl
 import com.par9uet.jm.storage.CookieStorage
 import com.par9uet.jm.storage.HistorySearchStorage
@@ -23,7 +22,6 @@ import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.store.UserManager
 import com.par9uet.jm.task.AppInitTask
 import com.par9uet.jm.ui.viewModel.GlobalViewModel
-import com.par9uet.jm.ui.viewModel.AnimeViewModel
 import com.par9uet.jm.utils.log
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
@@ -53,7 +51,6 @@ val appModule = module {
     single { SourceDomainResolver() }
     single { ApiLineProbe() }
     single { GitHubUpdateRepository(get()) }
-    single { AnimeRepository(get(), get()) }
     single { LocalSettingManager(get(), get(), get(), get()) } bind AppInitTask::class
     single { HistorySearchManager(get()) } bind AppInitTask::class
     single { ToastManager() }
@@ -63,5 +60,4 @@ val appModule = module {
     single<Gson> { GsonBuilder().setStrictness(Strictness.LENIENT).serializeNulls().create() }
 
     viewModel { GlobalViewModel(getAll(), get()) }
-    viewModel { AnimeViewModel(get()) }
 }
