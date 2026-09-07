@@ -38,8 +38,6 @@ import com.par9uet.jm.data.models.ComicPicImageState
 import com.par9uet.jm.data.models.ImageResultState
 import com.par9uet.jm.store.LocalSettingManager
 import com.par9uet.jm.ui.viewModel.ComicReadViewModel
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
@@ -49,7 +47,6 @@ import me.saket.telephoto.zoomable.rememberZoomableState
 import me.saket.telephoto.zoomable.zoomable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.getKoin
-import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
 private fun ComicPicImage(
@@ -102,7 +99,7 @@ private fun ComicPicImage(
     }
 }
 
-@OptIn(FlowPreview::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ComicScrollRead(
     comicReadViewModel: ComicReadViewModel = koinViewModel(),
@@ -129,7 +126,6 @@ fun ComicScrollRead(
     LaunchedEffect(lazyListState) {
         snapshotFlow { lazyListState.firstVisibleItemIndex }
             .distinctUntilChanged()
-            .debounce(1000.milliseconds)
             .collect {
                 if (currentIndexState != it) {
                     currentIndexState = it

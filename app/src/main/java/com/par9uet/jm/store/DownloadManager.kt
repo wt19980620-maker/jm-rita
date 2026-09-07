@@ -17,6 +17,9 @@ import com.par9uet.jm.worker.DownloadComicWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.concurrent.TimeUnit
 
 class DownloadManager(
@@ -25,11 +28,33 @@ class DownloadManager(
     private val scope: CoroutineScope,
     private val toastManager: ToastManager,
 ) {
+    private val operations = kotlinx.coroutines.sync.Mutex()
+    private val _availableBytes = MutableStateFlow(0L)
+    val availableBytes = _availableBytes.asStateFlow()
+
+    fun refreshStorage() {
+        scope.launch(Dispatchers.IO) { _availableBytes.value = getDownloadDir(context).usableSpace }
+    }
+
+    fun pauseDownload(comic: DownloadComic) {
+        scope.launch(Dispatchers.IO) { operations.withLock {
+            if (downloadComicDao.getById(comic.id)?.status !in listOf("pending", "downloading")) return@withLock
+            downloadComicDao.setState(comic.id, "paused")
+            try {
+                WorkManager.getInstance(context).cancelUniqueWork(workName(comic.id)).result.get()
+            } catch (_: Exception) {
+                toastManager.showAsync("停止下载失败，请重试")
+                return@withLock
+            }
+            DownloadLocks.forComic(comic.id).withLock { refreshStorage() }
+        } }
+    }
+
     fun downloadComic(comic: Comic) {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) { operations.withLock {
             if (downloadComicDao.getById(comic.id) != null) {
                 toastManager.showAsync("该漫画已在下载列表中")
-                return@launch
+                return@withLock
             }
             downloadComicDao.insert(
                 DownloadComic(
@@ -45,26 +70,38 @@ class DownloadManager(
             )
             toastManager.showAsync("创建下载任务成功")
             enqueue(comic.id, ExistingWorkPolicy.KEEP)
-        }
+        } }
     }
 
     fun retryDownload(comic: DownloadComic) {
-        scope.launch(Dispatchers.IO) {
-            downloadComicDao.update(
-                comic.copy(status = "pending", progress = 0f, zipPath = "")
-            )
-            enqueue(comic.id, ExistingWorkPolicy.REPLACE)
-            toastManager.showAsync("已重新创建下载任务")
-        }
+        scope.launch(Dispatchers.IO) { operations.withLock {
+            if (downloadComicDao.getById(comic.id) == null) return@withLock
+            downloadComicDao.setState(comic.id, "paused")
+            try {
+                WorkManager.getInstance(context).cancelUniqueWork(workName(comic.id)).result.get()
+            } catch (_: Exception) {
+                toastManager.showAsync("停止旧任务失败，请重试")
+                return@withLock
+            }
+            DownloadLocks.forComic(comic.id).withLock {
+                downloadComicDao.setState(comic.id, "pending")
+                enqueue(comic.id, ExistingWorkPolicy.REPLACE)
+            }
+            toastManager.showAsync("已继续下载，将保留校验通过的页面")
+        } }
     }
 
     fun deleteDownload(comic: DownloadComic) {
-        scope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) { operations.withLock {
             val workManager = WorkManager.getInstance(context)
-            runCatching {
+            downloadComicDao.setState(comic.id, "paused")
+            try {
                 workManager.cancelUniqueWork(workName(comic.id)).result.get()
+            } catch (e: Exception) {
+                toastManager.showAsync("停止下载失败，请重试删除")
+                return@withLock
             }
-
+            DownloadLocks.forComic(comic.id).withLock {
             val downloadRoot = getDownloadDir(context)
             val storedPath = comic.zipPath.takeIf { it.isNotBlank() }?.let { java.io.File(it) }
             val pageDir = storedPath?.takeIf { it.isDirectory }
@@ -85,7 +122,9 @@ class DownloadManager(
             } else {
                 toastManager.showAsync("部分下载文件删除失败，请重试")
             }
-        }
+            refreshStorage()
+            }
+        } }
     }
 
     private fun enqueue(comicId: Int, policy: ExistingWorkPolicy) {

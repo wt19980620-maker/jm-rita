@@ -69,6 +69,9 @@ fun DownloadListItem(
     onClick: () -> Unit,
     onRetry: () -> Unit,
     onDelete: () -> Unit,
+    onPause: () -> Unit,
+    selected: Boolean = false,
+    selecting: Boolean = false,
 ) {
     Card(
         onClick = onClick
@@ -100,7 +103,7 @@ fun DownloadListItem(
                 )
             }
             when (comic.status) {
-                "pending", "downloading", "error" -> {
+                "pending", "downloading", "error", "paused" -> {
                     Box(
                         modifier = Modifier
                             .matchParentSize()
@@ -135,18 +138,18 @@ fun DownloadListItem(
                     )
                 }
 
-                "error" -> {
+                "error", "paused" -> {
                     Column(
                         modifier = Modifier.align(Alignment.Center),
                     ) {
                         Text(
-                            text = "出错了",
+                            text = if (comic.status == "paused") "已暂停" else "下载失败",
                             color = MaterialTheme.colorScheme.surface
                         )
                         TextButton(onClick = {
                             onRetry()
                         }) {
-                            Text("重新下载")
+                            Text("继续下载")
                         }
                     }
 
@@ -155,6 +158,18 @@ fun DownloadListItem(
                 else -> {
 
                 }
+            }
+            if (comic.status in listOf("pending", "downloading")) {
+                TextButton(modifier = Modifier.align(Alignment.BottomCenter), onClick = onPause) {
+                    Text("暂停 ${(comic.progress * 100).toInt()}%")
+                }
+            }
+            if (selecting) {
+                androidx.compose.material3.Checkbox(
+                    checked = selected,
+                    onCheckedChange = { onClick() },
+                    modifier = Modifier.align(Alignment.TopStart),
+                )
             }
             IconButton(
                 modifier = Modifier
@@ -169,6 +184,13 @@ fun DownloadListItem(
                     tint = Color.White,
                 )
             }
+        }
+        if (comic.errorMessage.isNotBlank()) {
+            Text(comic.errorMessage, modifier = Modifier.padding(8.dp),
+                style = MaterialTheme.typography.bodySmall, maxLines = 4)
+        }
+        if (comic.status == "complete") {
+            TextButton(onClick = onRetry) { Text("校验并修复") }
         }
     }
 }

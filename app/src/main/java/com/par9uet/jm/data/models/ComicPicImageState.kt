@@ -24,6 +24,8 @@ import com.par9uet.jm.utils.log
 import com.par9uet.jm.utils.md5
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileOutputStream
 
@@ -52,10 +54,11 @@ class ComicPicImageState(
     }
 
     var imageResultState by mutableStateOf<ImageResultState>(ImageResultState.Loading)
+    private val decodeMutex = Mutex()
 
-    suspend fun decode(context: Context) {
+    suspend fun decode(context: Context) = decodeMutex.withLock {
         if (imageResultState is ImageResultState.Success) {
-            return
+            return@withLock
         }
         withContext(Dispatchers.Default) {
             imageResultState = ImageResultState.Loading
@@ -66,6 +69,10 @@ class ComicPicImageState(
     suspend fun decodeLocalFile(): Boolean = withContext(Dispatchers.IO) {
         val file = File(originSrc)
         if (!file.isFile) {
+            if (file.isAbsolute) {
+                imageResultState = ImageResultState.Failure("本地图片已丢失，请修复下载")
+                return@withContext true
+            }
             return@withContext false
         }
         val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: run {
@@ -92,12 +99,15 @@ class ComicPicImageState(
 
         // 检查缓存文件是否存在
         if (cacheFile.exists()) {
-            val decodeImageBitmap =
-                BitmapFactory.decodeFile(cacheFile.absolutePath).asImageBitmap()
-            val decodeImageAspectRatio =
-                decodeImageBitmap.width * 1.0f / decodeImageBitmap.height
-            imageResultState = ImageResultState.Success(decodeImageBitmap, decodeImageAspectRatio)
-            return
+            val bitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
+            if (bitmap != null) {
+                val decodeImageBitmap = bitmap.asImageBitmap()
+                val decodeImageAspectRatio =
+                    decodeImageBitmap.width * 1.0f / decodeImageBitmap.height
+                imageResultState = ImageResultState.Success(decodeImageBitmap, decodeImageAspectRatio)
+                return
+            }
+            cacheFile.delete()
         }
 
         // 加载原始图片

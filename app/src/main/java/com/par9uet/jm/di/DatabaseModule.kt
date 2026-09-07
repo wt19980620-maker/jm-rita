@@ -17,7 +17,11 @@ val databaseModule = module {
             androidContext(),
             AppDatabase::class.java,
             "app_database"
-        ).fallbackToDestructiveMigration(false).build()
+        ).addMigrations(object : androidx.room.migration.Migration(2, 3) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE download_comics ADD COLUMN errorMessage TEXT NOT NULL DEFAULT ''")
+            }
+        }).build()
     }
     single { get<AppDatabase>().downloadComicDao() }
     single { DownloadManager(get(), get(), get(), get()) }

@@ -22,6 +22,11 @@ class DownloadViewModel(
     private val downloadComicDao: DownloadComicDao,
     private val downloadManager: DownloadManager,
 ) : ViewModel() {
+    val availableBytes = downloadManager.availableBytes
+    init { downloadManager.refreshStorage() }
+    fun refreshStorage() = downloadManager.refreshStorage()
+    fun pauseDownload(comic: DownloadComic) = downloadManager.pauseDownload(comic)
+    fun deleteDownloads(comics: List<DownloadComic>) = comics.forEach(downloadManager::deleteDownload)
     private val _downloadFilterState = MutableStateFlow(DownloadFilter("downloading"))
     val downloadFilterState = _downloadFilterState.asStateFlow()
 

@@ -40,13 +40,46 @@ fun DownloadScreen(
 ) {
     val mainNavController = LocalMainNavController.current
     var pendingDelete by remember { mutableStateOf<DownloadComic?>(null) }
+    var pendingRepair by remember { mutableStateOf<DownloadComic?>(null) }
+    var selecting by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf<Map<Int, DownloadComic>>(emptyMap()) }
+    var confirmBatch by remember { mutableStateOf(false) }
+    val availableBytes by downloadViewModel.availableBytes.collectAsState()
+    androidx.compose.runtime.LaunchedEffect(Unit) { downloadViewModel.refreshStorage() }
     val scrollState = rememberScrollState()
     val downloadFilter by downloadViewModel.downloadFilterState.collectAsState()
     val selectedTabIndex = tabList.indexOfFirst { it.second == downloadFilter.status }
         .coerceAtLeast(0)
     val downloadLazyPagingItems = downloadViewModel.downloadPager.collectAsLazyPagingItems()
     val onTabClick: (index: Int) -> Unit = {
+        selected = emptyMap()
         downloadViewModel.updateDownloadStatusFilter(tabList[it].second)
+    }
+    pendingRepair?.let { comic ->
+        AlertDialog(
+            onDismissRequest = { pendingRepair = null },
+            title = { Text("校验并修复下载") },
+            text = { Text("需要联网获取页表，并重新下载缺失或损坏页面。修复完成前此项目将移至下载中；旧版下载首次修复可能需要全部重下。") },
+            confirmButton = { TextButton(onClick = {
+                downloadViewModel.retryDownload(comic)
+                pendingRepair = null
+            }) { Text("开始修复") } },
+            dismissButton = { TextButton(onClick = { pendingRepair = null }) { Text("取消") } },
+        )
+    }
+    if (confirmBatch) {
+        AlertDialog(
+            onDismissRequest = { confirmBatch = false },
+            title = { Text("删除 ${selected.size} 本下载") },
+            text = { Text("将删除选中漫画的本地文件，删除后需重新下载。") },
+            confirmButton = { TextButton(onClick = {
+                downloadViewModel.deleteDownloads(selected.values.toList())
+                selected = emptyMap()
+                selecting = false
+                confirmBatch = false
+            }) { Text("删除") } },
+            dismissButton = { TextButton(onClick = { confirmBatch = false }) { Text("取消") } },
+        )
     }
     pendingDelete?.let { comic ->
         AlertDialog(
@@ -72,6 +105,20 @@ fun DownloadScreen(
     }
     CommonScaffold(title = "我的下载") {
         Column {
+            Text("可用空间：${availableBytes / (1024 * 1024)} MB")
+            androidx.compose.foundation.layout.Row {
+                TextButton(onClick = { selecting = !selecting; selected = emptyMap() }) {
+                    Text(if (selecting) "完成选择" else "批量管理")
+                }
+                if (selecting) {
+                    TextButton(onClick = {
+                        selected = downloadLazyPagingItems.itemSnapshotList.items.associateBy { it.id }
+                    }) { Text("选择已加载项") }
+                    TextButton(enabled = selected.isNotEmpty(), onClick = { confirmBatch = true }) {
+                        Text("删除(${selected.size})")
+                    }
+                }
+            }
             PrimaryScrollableTabRow(
                 selectedTabIndex = selectedTabIndex,
                 edgePadding = 0.dp,
@@ -99,6 +146,7 @@ fun DownloadScreen(
                 modifier = Modifier.weight(1f),
                 isRefreshing = isRefreshing,
                 onRefresh = {
+                    downloadViewModel.refreshStorage()
                     downloadLazyPagingItems.refresh()
                 }
             ) {
@@ -118,16 +166,22 @@ fun DownloadScreen(
                             DownloadListItem(
                                 comic = item,
                                 onClick = {
-                                    if (item.status == "complete") {
+                                    if (selecting) {
+                                        selected = if (item.id in selected) selected - item.id else selected + (item.id to item)
+                                    } else if (item.status == "complete") {
                                         mainNavController.navigate("comicRead/${item.id}")
                                     }
                                 },
                                 onRetry = {
-                                    downloadViewModel.retryDownload(item)
+                                    if (item.status == "complete") pendingRepair = item
+                                    else downloadViewModel.retryDownload(item)
                                 },
                                 onDelete = {
                                     pendingDelete = item
-                                }
+                                },
+                                onPause = { downloadViewModel.pauseDownload(item) },
+                                selected = item.id in selected,
+                                selecting = selecting,
                             )
                         }
                     }

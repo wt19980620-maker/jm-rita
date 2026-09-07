@@ -16,7 +16,6 @@ import com.par9uet.jm.data.models.ImageResultState
 import com.par9uet.jm.database.dao.DownloadComicDao
 import com.par9uet.jm.database.model.UpdateComicCover
 import com.par9uet.jm.database.model.UpdateComicProgress
-import com.par9uet.jm.database.model.UpdateComicStatus
 import com.par9uet.jm.database.model.UpdateComicZipPath
 import com.par9uet.jm.repository.ComicRepository
 import com.par9uet.jm.retrofit.model.ComicPicListResponse
@@ -28,6 +27,11 @@ import com.par9uet.jm.utils.tryCreateDir
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import com.par9uet.jm.store.DownloadLocks
+import com.par9uet.jm.utils.OfflinePages
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -48,13 +52,8 @@ class DownloadComicWorker(
         if (comicId == -1) {
             return Result.failure()
         }
-        return try {
-            downloadComicDao.updateStatus(
-                UpdateComicStatus(
-                    comicId,
-                    "downloading"
-                )
-            )
+        return DownloadLocks.forComic(comicId).withLock { try {
+            if (downloadComicDao.setActiveState(comicId, "downloading") == 0) return@withLock Result.success()
             val coverPath = downloadCover(comicId)
             downloadComicDao.updateCover(
                 UpdateComicCover(
@@ -70,26 +69,25 @@ class DownloadComicWorker(
                     downloadPath
                 )
             )
-            downloadComicDao.updateStatus(
-                UpdateComicStatus(
-                    comicId,
-                    "complete"
-                )
-            )
-            toastManager.showAsync("下载成功")
+            currentCoroutineContext().ensureActive()
+            if (downloadComicDao.setActiveState(comicId, "complete") > 0) {
+                toastManager.showAsync("下载成功")
+            }
             Result.success()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            if (runAttemptCount < 3) {
-                downloadComicDao.updateStatus(UpdateComicStatus(comicId, "pending"))
+            val message = if (e is LowStorageException) "存储空间不足，请清理后继续" else
+                "下载失败：${e.message.orEmpty().take(160)}"
+            if (runAttemptCount < 3 && e !is LowStorageException) {
+                downloadComicDao.setActiveState(comicId, "pending", message)
                 Result.retry()
             } else {
-                downloadComicDao.updateStatus(UpdateComicStatus(comicId, "error"))
+                downloadComicDao.setActiveState(comicId, "error", message)
                 toastManager.showAsync("下载失败，可在我的下载中重试")
                 Result.failure()
             }
-        }
+        } }
     }
 
     private suspend fun downloadCover(comicId: Int): String {
@@ -131,8 +129,21 @@ class DownloadComicWorker(
                         throw IOException("漫画图片列表为空")
                     }
                     val dir = getComicPicListDownloadDir(comicId)
-                    dir.listFiles()?.forEach { it.delete() }
-                    data.data.list.mapIndexed { index, url ->
+                    val manifest = try {
+                        OfflinePages.readIndex(dir)
+                    } catch (_: IOException) {
+                        java.util.Properties()
+                    }
+                    manifest.setProperty("count", data.data.list.size.toString())
+                    OfflinePages.writeIndex(dir, manifest)
+                    val paths = data.data.list.mapIndexed { index, url ->
+                        currentCoroutineContext().ensureActive()
+                        val source = "${java.net.URI(url).path}|${data.data.__scrambleId}|${data.data.__speed}"
+                        if (OfflinePages.reusable(dir, manifest, index, source)) {
+                            downloadComicDao.updateProgress(UpdateComicProgress(comicId, (index + 1f) / data.data.list.size))
+                            return@mapIndexed OfflinePages.page(dir, index).absolutePath
+                        }
+                        if (dir.usableSpace < 32L * 1024 * 1024) throw LowStorageException()
                         val imageState = ComicPicImageState(
                             index = index,
                             comicId = comicId,
@@ -153,9 +164,24 @@ class DownloadComicWorker(
 
                             is ImageResultState.Success -> {
                                 val bitmap = result.decodeImageBitmap.asAndroidBitmap()
-                                val file = File(dir, "offline_%05d.webp".format(index))
-                                FileOutputStream(file).use { out ->
-                                    bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)
+                                val file = OfflinePages.page(dir, index)
+                                val temporary = File(dir, "${file.name}.tmp")
+                                try {
+                                    FileOutputStream(temporary).use { out ->
+                                        if (!bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)) {
+                                            throw IOException("图片保存失败")
+                                        }
+                                        out.fd.sync()
+                                    }
+                                    currentCoroutineContext().ensureActive()
+                                    java.nio.file.Files.move(temporary.toPath(), file.toPath(),
+                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                                        java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                                    manifest.setProperty("source.$index", source)
+                                    manifest.setProperty("hash.$index", OfflinePages.digest(file))
+                                    OfflinePages.writeIndex(dir, manifest)
+                                } finally {
+                                    temporary.delete()
                                 }
                                 downloadComicDao.updateProgress(
                                     UpdateComicProgress(
@@ -167,6 +193,13 @@ class DownloadComicWorker(
                             }
                         }
                     }
+                    paths.forEachIndexed { index, path ->
+                        currentCoroutineContext().ensureActive()
+                        if (manifest.getProperty("hash.$index") != OfflinePages.digest(File(path))) {
+                            throw IOException("第 ${index + 1} 页完整性校验失败")
+                        }
+                    }
+                    paths
                 }
             }
         }
@@ -182,3 +215,5 @@ class DownloadComicWorker(
         return tryCreateDir(File(dir, "cover"))
     }
 }
+
+private class LowStorageException : IOException("存储空间不足")

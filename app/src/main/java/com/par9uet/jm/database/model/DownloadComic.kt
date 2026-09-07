@@ -12,6 +12,8 @@ data class DownloadComic(
     val coverPath: String,
     val zipPath: String,
     val progress: Float,
-    val status: String, // pending || downloading || complete
+    val status: String, // pending / downloading / paused / error / complete
     val createTime: Long,
+    @androidx.room.ColumnInfo(defaultValue = "''")
+    val errorMessage: String = "",
 )

@@ -30,6 +30,9 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.time.Duration.Companion.milliseconds
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.par9uet.jm.utils.OfflinePages
 
 class ComicReadViewModel(
     private val comicRepository: ComicRepository,
@@ -54,9 +57,11 @@ class ComicReadViewModel(
     private val _refreshComicPicTrigger = MutableSharedFlow<Unit>()
     val refreshComicPicTrigger: SharedFlow<Unit> = _refreshComicPicTrigger.asSharedFlow()
     private val prefetchSet = mutableSetOf<Int>()
+    private var listJob: Job? = null
 
     fun getComicPicList(comicId: Int, shunt: String) {
-        viewModelScope.launch {
+        listJob?.cancel()
+        listJob = viewModelScope.launch {
             _comicPicState.update {
                 it.copy(
                     isLoading = true,
@@ -65,16 +70,23 @@ class ComicReadViewModel(
                 )
             }
             val localDownload = downloadComicDao.getById(comicId)
-            val localPages = localDownload
+            val localPages = try { withContext(Dispatchers.IO) { localDownload
                 ?.takeIf { it.status == "complete" && it.zipPath.isNotBlank() }
                 ?.let {
                     File(it.zipPath).let { path ->
                         if (path.isDirectory) path else path.parentFile?.resolve(comicId.toString())
                     }
                 }
-                ?.listFiles { file -> file.isFile && file.extension == "webp" }
-                ?.sortedBy { it.name }
+                ?.let(OfflinePages::list)
                 .orEmpty()
+            } } catch (e: java.io.IOException) {
+                _comicPicState.update { it.copy(isLoading = false, isError = true, errorMsg = "本地下载损坏，请在我的下载中校验并修复") }
+                return@launch
+            }
+            if (localDownload?.status == "complete" && localPages.isEmpty()) {
+                _comicPicState.update { it.copy(isLoading = false, isError = true, errorMsg = "本地文件已丢失，请在我的下载中校验并修复") }
+                return@launch
+            }
             if (localPages.isNotEmpty()) {
                 val localImageStates = localPages.mapIndexed { index, file ->
                     ComicPicImageState(
@@ -137,7 +149,7 @@ class ComicReadViewModel(
         log("decode index $index")
         val count = localSettingManager.localSettingState.value.prefetchCount
         val start = max(0, index - count)
-        val end = min(sizeState.value - 1, index + count)
+        val end = min((comicPicState.value.data?.size ?: 0) - 1, index + count)
         decode(index, context) {
             for (i in index + 1..end) {
                 log("pre decode index $i")
