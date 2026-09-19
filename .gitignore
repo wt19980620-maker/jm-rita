@@ -20,3 +20,4 @@ release-key
 *.key
 .env
 .env.*
+old_versions_to_delete/
