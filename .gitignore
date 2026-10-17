@@ -2,6 +2,7 @@
 .gradle
 .kotlin/
 .idea/
+.claude/
 /local.properties
 .DS_Store
 /build
@@ -20,4 +21,7 @@ release-key
 *.key
 .env
 .env.*
+.venv/
+__pycache__/
+*.pyc
 old_versions_to_delete/
