@@ -11,7 +11,6 @@ import com.par9uet.jm.retrofit.model.NetWorkResult
 import com.par9uet.jm.store.ToastManager
 import com.par9uet.jm.ui.models.CommonUIState
 import com.par9uet.jm.ui.pagingSource.ComicCommentPagingSource
-import com.par9uet.jm.utils.log
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -73,7 +72,6 @@ class ComicCommentViewModel(
                 }
 
                 is NetWorkResult.Success<CommentComicResponse> -> {
-                    log("commentArg $content, $comicId, $commentId")
                     toastManager.showAsync(data.data.msg)
                     if (data.data.status == "ok") {
                         onSuccess?.invoke()

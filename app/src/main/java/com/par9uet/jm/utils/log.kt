@@ -1,11 +1,12 @@
 package com.par9uet.jm.utils
 
 import android.util.Log
+import com.par9uet.jm.BuildConfig
 
 inline fun <reified T> T.log(msg: String) {
-    Log.d("[JM-MOBILE] ${T::class.java.simpleName}", msg)
+    if (BuildConfig.DEBUG) Log.d("[JM-MOBILE] ${T::class.java.simpleName}", msg)
 }
 
 fun log(tag: String, msg: String) {
-    Log.d("[JM-MOBILE] $tag", msg)
+    if (BuildConfig.DEBUG) Log.d("[JM-MOBILE] $tag", msg)
 }

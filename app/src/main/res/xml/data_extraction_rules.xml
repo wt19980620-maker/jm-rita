@@ -6,18 +6,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="download/" />
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
     </cloud-backup>
-    <!--
-    <device-transfer>
-        <include .../>
-        <exclude .../>
-    </device-transfer>
-    -->
     <device-transfer>
         <exclude domain="file" path="download/" />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
     </device-transfer>
 </data-extraction-rules>
