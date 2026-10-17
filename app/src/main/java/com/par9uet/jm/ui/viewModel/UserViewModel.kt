@@ -33,6 +33,7 @@ class UserViewModel(
     val loginState = _loginState.asStateFlow()
     fun login(username: String, password: String) {
         viewModelScope.launch {
+            userManager.stopAutoLogin()
             _loginState.update {
                 it.copy(
                     isLoading = true,
@@ -68,6 +69,7 @@ class UserViewModel(
 
     fun logout() {
         viewModelScope.launch {
+            userManager.stopAutoLogin()
             userManager.clearUser()
         }
     }

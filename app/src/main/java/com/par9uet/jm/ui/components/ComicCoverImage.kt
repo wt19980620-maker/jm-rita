@@ -40,7 +40,8 @@ fun ComicCoverImage(
     val remoteSetting by remoteSettingManager.remoteSettingState.collectAsState()
     Box(modifier = Modifier.fillMaxWidth()) {
         AsyncImage(
-            model = "${remoteSetting.imgHost}/media/albums/${comic.id}_3x4.jpg",
+            model = remoteSetting.imgHost.takeIf { it.isNotBlank() }
+                ?.let { "$it/media/albums/${comic.id}_3x4.jpg" },
             imageLoader = imageLoader,
             contentDescription = "${comic.name}的封面",
             contentScale = ContentScale.FillBounds,

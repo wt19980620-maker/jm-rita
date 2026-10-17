@@ -1,14 +1,26 @@
 package com.par9uet.jm.ui.screens.downloadScreen
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -28,6 +40,7 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.par9uet.jm.ui.components.CommonScaffold
 import com.par9uet.jm.ui.viewModel.DownloadViewModel
+import com.par9uet.jm.ui.viewModel.DownloadSort
 import com.par9uet.jm.ui.screens.LocalMainNavController
 import com.par9uet.jm.database.model.DownloadComic
 import org.koin.compose.viewmodel.koinActivityViewModel
@@ -44,6 +57,8 @@ fun DownloadScreen(
     var selecting by remember { mutableStateOf(false) }
     var selected by remember { mutableStateOf<Map<Int, DownloadComic>>(emptyMap()) }
     var confirmBatch by remember { mutableStateOf(false) }
+    var sortExpanded by remember { mutableStateOf(false) }
+    var storageRefreshKey by remember { mutableStateOf(0L) }
     val availableBytes by downloadViewModel.availableBytes.collectAsState()
     androidx.compose.runtime.LaunchedEffect(Unit) { downloadViewModel.refreshStorage() }
     val scrollState = rememberScrollState()
@@ -119,6 +134,25 @@ fun DownloadScreen(
                     }
                 }
             }
+            OutlinedTextField(
+                value = downloadFilter.query,
+                onValueChange = {
+                    selected = emptyMap()
+                    downloadViewModel.updateDownloadSearchQuery(it)
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                placeholder = { Text("搜索名称、作者或 JM 号") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (downloadFilter.query.isNotEmpty()) {
+                        IconButton(onClick = {
+                            selected = emptyMap()
+                            downloadViewModel.updateDownloadSearchQuery("")
+                        }) { Icon(Icons.Default.Close, contentDescription = "清除搜索") }
+                    }
+                },
+                singleLine = true,
+            )
             PrimaryScrollableTabRow(
                 selectedTabIndex = selectedTabIndex,
                 edgePadding = 0.dp,
@@ -141,16 +175,46 @@ fun DownloadScreen(
                     }
                 }
             }
+            Box {
+                TextButton(onClick = { sortExpanded = true }) {
+                    Text("排序：${downloadFilter.sort.label}")
+                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
+                    DownloadSort.entries.forEach { sort ->
+                        DropdownMenuItem(
+                            text = { Text(sort.label) },
+                            onClick = {
+                                selected = emptyMap()
+                                sortExpanded = false
+                                downloadViewModel.updateDownloadSort(sort)
+                            },
+                        )
+                    }
+                }
+            }
             val isRefreshing = downloadLazyPagingItems.loadState.refresh is LoadState.Loading
             PullToRefreshBox(
                 modifier = Modifier.weight(1f),
                 isRefreshing = isRefreshing,
                 onRefresh = {
                     downloadViewModel.refreshStorage()
+                    storageRefreshKey = System.nanoTime()
                     downloadLazyPagingItems.refresh()
                 }
             ) {
-                LazyVerticalGrid(
+                if (downloadLazyPagingItems.itemCount == 0 && !isRefreshing) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (downloadLazyPagingItems.loadState.refresh is LoadState.Error) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("下载列表加载失败")
+                                TextButton(onClick = downloadLazyPagingItems::retry) { Text("重试") }
+                            }
+                        } else {
+                            Text(if (downloadFilter.query.isBlank()) "暂无下载" else "没有找到匹配的下载")
+                        }
+                    }
+                } else LazyVerticalGrid(
                     modifier = Modifier.fillMaxSize(),
                     columns = GridCells.Fixed(3),
                     verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.Top),
@@ -182,6 +246,7 @@ fun DownloadScreen(
                                 onPause = { downloadViewModel.pauseDownload(item) },
                                 selected = item.id in selected,
                                 selecting = selecting,
+                                storageRefreshKey = storageRefreshKey,
                             )
                         }
                     }

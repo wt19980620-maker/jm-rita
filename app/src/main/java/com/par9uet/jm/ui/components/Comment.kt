@@ -40,7 +40,8 @@ fun Comment(
         horizontalArrangement = Arrangement.spacedBy(15.dp)
     ) {
         AsyncImage(
-            model = "${remoteSetting.imgHost}/media/users/${comment.avatar}",
+            model = remoteSetting.imgHost.takeIf { it.isNotBlank() }
+                ?.let { "$it/media/users/${comment.avatar}" },
             contentDescription = "${comment.nickname}的头像",
             contentScale = ContentScale.FillBounds,
             modifier = Modifier

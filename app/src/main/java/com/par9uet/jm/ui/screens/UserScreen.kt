@@ -152,7 +152,8 @@ fun UserScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         AsyncImage(
-                            model = "${remoteSetting.imgHost}/media/users/${user.avatar}",
+                            model = remoteSetting.imgHost.takeIf { it.isNotBlank() }
+                                ?.let { "$it/media/users/${user.avatar}" },
                             contentDescription = "${user.username}的头像",
                             modifier = Modifier
                                 .size(80.dp)

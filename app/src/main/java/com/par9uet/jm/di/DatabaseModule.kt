@@ -3,6 +3,8 @@ package com.par9uet.jm.di
 import androidx.room.Room
 import com.par9uet.jm.database.AppDatabase
 import com.par9uet.jm.store.DownloadManager
+import com.par9uet.jm.storage.DownloadSizeStorage
+import java.io.File
 import com.par9uet.jm.ui.viewModel.DownloadViewModel
 import com.par9uet.jm.worker.DownloadComicWorker
 import org.koin.android.ext.koin.androidContext
@@ -24,8 +26,12 @@ val databaseModule = module {
         }).build()
     }
     single { get<AppDatabase>().downloadComicDao() }
-    single { DownloadManager(get(), get(), get(), get()) }
+    single {
+        val context = androidContext()
+        DownloadSizeStorage(File(context.filesDir, "download"), File(context.filesDir, "download_sizes"))
+    }
+    single { DownloadManager(get(), get(), get(), get(), get()) }
     viewModel { DownloadViewModel(get(), get()) }
 
-    worker { DownloadComicWorker(get(), get(), get(), get(), get(), get(), get(), get()) }
+    worker { DownloadComicWorker(get(), get(), get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 }

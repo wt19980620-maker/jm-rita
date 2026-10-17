@@ -19,7 +19,7 @@ import coil.request.ErrorResult
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.size.Size
-import com.par9uet.jm.cache.getCommonPicDecodeCacheDir
+import com.par9uet.jm.store.ImageCacheManager
 import com.par9uet.jm.utils.log
 import com.par9uet.jm.utils.md5
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
-import java.io.FileOutputStream
+import java.io.IOException
 
 sealed class ImageResultState {
     object Loading : ImageResultState()
@@ -47,6 +47,7 @@ class ComicPicImageState(
     val __scrambleId: Int,
     val __speed: String,
     private val picImageLoader: ImageLoader,
+    private val imageCacheManager: ImageCacheManager,
 ) {
 
     companion object {
@@ -90,24 +91,12 @@ class ComicPicImageState(
         if (decodeLocalFile()) {
             return
         }
-        val cacheDir = getCommonPicDecodeCacheDir(context, comicId)
-        if (!cacheDir.exists()) {
-            cacheDir.mkdirs()
-        }
         val page = extractPageFromUrl()
-        val cacheFile = File(cacheDir, "$page.webp")
-
-        // 检查缓存文件是否存在
-        if (cacheFile.exists()) {
-            val bitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
-            if (bitmap != null) {
-                val decodeImageBitmap = bitmap.asImageBitmap()
-                val decodeImageAspectRatio =
-                    decodeImageBitmap.width * 1.0f / decodeImageBitmap.height
-                imageResultState = ImageResultState.Success(decodeImageBitmap, decodeImageAspectRatio)
-                return
-            }
-            cacheFile.delete()
+        val cachedBitmap = imageCacheManager.read(comicId, page)
+        if (cachedBitmap != null) {
+            val image = cachedBitmap.asImageBitmap()
+            imageResultState = ImageResultState.Success(image, image.width.toFloat() / image.height)
+            return
         }
 
         // 加载原始图片
@@ -126,10 +115,10 @@ class ComicPicImageState(
                     originalImageBitmap.width * 1.0f / originalImageBitmap.height
                 var decodedImageBitmap = originalImageBitmap
                 if (isGif() || comicId <= __scrambleId || __speed == "1") {
-                    saveBitmapAsWebp(originalBitmap, cacheFile)
+                    saveBitmapAsWebp(originalBitmap, page)
                 } else {
                     val decodedBitmap = decodeBitmap(originalBitmap, page)
-                    saveBitmapAsWebp(decodedBitmap, cacheFile)
+                    saveBitmapAsWebp(decodedBitmap, page)
                     decodedImageBitmap = decodedBitmap.asImageBitmap()
                 }
                 imageResultState =
@@ -204,11 +193,11 @@ class ComicPicImageState(
         return originSrc.substringAfterLast('/').substringBeforeLast('.')
     }
 
-    private suspend fun saveBitmapAsWebp(bitmap: Bitmap, file: File) {
-        withContext(Dispatchers.IO) {
-            FileOutputStream(file).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)
-            }
+    private suspend fun saveBitmapAsWebp(bitmap: Bitmap, page: String) {
+        try {
+            imageCacheManager.write(comicId, page, bitmap)
+        } catch (e: IOException) {
+            log("图片缓存写入失败：${e.javaClass.simpleName}")
         }
     }
 

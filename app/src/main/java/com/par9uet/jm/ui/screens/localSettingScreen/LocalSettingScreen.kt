@@ -1,6 +1,8 @@
 package com.par9uet.jm.ui.screens.localSettingScreen
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -37,7 +39,7 @@ fun LocalSettingScreen(
     CommonScaffold(
         title = "设置"
     ) {
-        Column {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
             ListItem(
                 headlineContent = { Text("内容来源") },
                 supportingContent = {
@@ -66,6 +68,7 @@ fun LocalSettingScreen(
             ThemeSettingListItem()
             ColorPaletteSettingListItem()
             ApiSettingListItem()
+            CacheSettingListItem()
             AppUpdateSettingListItem()
         }
     }

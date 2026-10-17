@@ -12,6 +12,7 @@ import com.par9uet.jm.repository.ComicRepository
 import com.par9uet.jm.retrofit.model.ComicPicListResponse
 import com.par9uet.jm.retrofit.model.NetWorkResult
 import com.par9uet.jm.store.LocalSettingManager
+import com.par9uet.jm.store.ImageCacheManager
 import com.par9uet.jm.ui.models.CommonUIState
 import com.par9uet.jm.utils.log
 import kotlinx.coroutines.Job
@@ -39,6 +40,7 @@ class ComicReadViewModel(
     private val picImageLoader: ImageLoader,
     private val localSettingManager: LocalSettingManager,
     private val downloadComicDao: DownloadComicDao,
+    private val imageCacheManager: ImageCacheManager,
 ) : ViewModel() {
     var isShowToolBar = mutableStateOf(false)
     private var hideToolBarJob: Job? = null
@@ -96,6 +98,7 @@ class ComicReadViewModel(
                         __scrambleId = Int.MAX_VALUE,
                         __speed = "1",
                         picImageLoader = picImageLoader,
+                        imageCacheManager = imageCacheManager,
                     )
                 }
                 localImageStates.firstOrNull()?.decodeLocalFile()
@@ -126,6 +129,7 @@ class ComicReadViewModel(
                                     data.data.__scrambleId,
                                     data.data.__speed,
                                     picImageLoader,
+                                    imageCacheManager,
                                 )
                             }
                         )

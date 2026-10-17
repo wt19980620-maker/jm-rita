@@ -23,6 +23,9 @@ import com.par9uet.jm.retrofit.model.NetWorkResult
 import com.par9uet.jm.store.LocalSettingManager
 import com.par9uet.jm.store.RemoteSettingManager
 import com.par9uet.jm.store.ToastManager
+import com.par9uet.jm.store.ImageCacheManager
+import com.par9uet.jm.store.InitManager
+import com.par9uet.jm.storage.DownloadSizeStorage
 import com.par9uet.jm.utils.tryCreateDir
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +48,9 @@ class DownloadComicWorker(
     private val comicRepository: ComicRepository,
     private val toastManager: ToastManager,
     private val imageLoader: ImageLoader,
+    private val imageCacheManager: ImageCacheManager,
+    private val downloadSizeStorage: DownloadSizeStorage,
+    private val initManager: InitManager,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -53,7 +59,10 @@ class DownloadComicWorker(
             return Result.failure()
         }
         return DownloadLocks.forComic(comicId).withLock { try {
+            initManager.deferred.await()
             if (downloadComicDao.setActiveState(comicId, "downloading") == 0) return@withLock Result.success()
+            val comic = downloadComicDao.getById(comicId) ?: return@withLock Result.success()
+            withContext(Dispatchers.IO) { downloadSizeStorage.reconcile(comic) }
             val coverPath = downloadCover(comicId)
             downloadComicDao.updateCover(
                 UpdateComicCover(
@@ -92,8 +101,10 @@ class DownloadComicWorker(
 
     private suspend fun downloadCover(comicId: Int): String {
         return withContext(Dispatchers.IO) {
+            val imageHost = remoteSettingManager.imageHost()
+            if (imageHost.isBlank()) return@withContext ""
             val coverUrl =
-                "${remoteSettingManager.remoteSettingState.value.imgHost}/media/albums/${comicId}_3x4.jpg"
+                "$imageHost/media/albums/${comicId}_3x4.jpg"
             val request = ImageRequest.Builder(appContext)
                 .data(coverUrl)
                 .allowHardware(false)
@@ -108,8 +119,20 @@ class DownloadComicWorker(
                     val bitmap = result.drawable.toBitmap()
                     val dir = getComicCoverDownloadDir()
                     val file = File(dir, "${comicId}.jpg")
-                    FileOutputStream(file).use { out ->
-                        bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)
+                    downloadSizeStorage.trackWrite(comicId, file) {
+                        val temporary = File(dir, "${file.name}.tmp")
+                        try {
+                            FileOutputStream(temporary).use { out ->
+                                if (!bitmap.compress(Bitmap.CompressFormat.WEBP_LOSSY, 50, out)) {
+                                    throw IOException("封面保存失败")
+                                }
+                            }
+                            java.nio.file.Files.move(temporary.toPath(), file.toPath(),
+                                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                                java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                        } finally {
+                            temporary.delete()
+                        }
                     }
                     file.absolutePath
                 }
@@ -135,7 +158,9 @@ class DownloadComicWorker(
                         java.util.Properties()
                     }
                     manifest.setProperty("count", data.data.list.size.toString())
-                    OfflinePages.writeIndex(dir, manifest)
+                    downloadSizeStorage.trackWrite(comicId, File(dir, "pages.properties")) {
+                        OfflinePages.writeIndex(dir, manifest)
+                    }
                     val paths = data.data.list.mapIndexed { index, url ->
                         currentCoroutineContext().ensureActive()
                         val source = "${java.net.URI(url).path}|${data.data.__scrambleId}|${data.data.__speed}"
@@ -151,6 +176,7 @@ class DownloadComicWorker(
                             __scrambleId = data.data.__scrambleId,
                             __speed = data.data.__speed,
                             picImageLoader = imageLoader,
+                            imageCacheManager = imageCacheManager,
                         )
                         imageState.decode(appContext)
                         when (val result = imageState.imageResultState) {
@@ -174,12 +200,16 @@ class DownloadComicWorker(
                                         out.fd.sync()
                                     }
                                     currentCoroutineContext().ensureActive()
-                                    java.nio.file.Files.move(temporary.toPath(), file.toPath(),
-                                        java.nio.file.StandardCopyOption.REPLACE_EXISTING,
-                                        java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                                    downloadSizeStorage.trackWrite(comicId, file) {
+                                        java.nio.file.Files.move(temporary.toPath(), file.toPath(),
+                                            java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                                            java.nio.file.StandardCopyOption.ATOMIC_MOVE)
+                                    }
                                     manifest.setProperty("source.$index", source)
                                     manifest.setProperty("hash.$index", OfflinePages.digest(file))
-                                    OfflinePages.writeIndex(dir, manifest)
+                                    downloadSizeStorage.trackWrite(comicId, File(dir, "pages.properties")) {
+                                        OfflinePages.writeIndex(dir, manifest)
+                                    }
                                 } finally {
                                     temporary.delete()
                                 }

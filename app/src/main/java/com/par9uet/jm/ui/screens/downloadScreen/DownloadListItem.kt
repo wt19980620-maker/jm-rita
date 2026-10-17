@@ -21,6 +21,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,9 +34,23 @@ import androidx.compose.ui.unit.sp
 import coil.ImageLoader
 import coil.compose.AsyncImage
 import com.par9uet.jm.database.model.DownloadComic
+import com.par9uet.jm.storage.DownloadSizeStorage
 import com.par9uet.jm.utils.shimmer
 import org.koin.compose.getKoin
 import java.io.File
+import java.io.IOException
+import android.text.format.Formatter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+
+private sealed interface StorageSize {
+    data object Loading : StorageSize
+    data object Missing : StorageSize
+    data object Unavailable : StorageSize
+    data class Ready(val bytes: Long) : StorageSize
+}
 
 @Composable
 private fun ComicCoverImage(
@@ -72,7 +88,27 @@ fun DownloadListItem(
     onPause: () -> Unit,
     selected: Boolean = false,
     selecting: Boolean = false,
+    storageRefreshKey: Long = 0L,
+    downloadSizeStorage: DownloadSizeStorage = getKoin().get(),
 ) {
+    val context = LocalContext.current
+    val storageSize by produceState<StorageSize>(
+        StorageSize.Loading, comic.id, comic.status, comic.zipPath, comic.coverPath, storageRefreshKey
+    ) {
+        try {
+            withContext(Dispatchers.IO) {
+                downloadSizeStorage.load(comic, refreshToken = if (
+                    comic.status in listOf("pending", "downloading")
+                ) 0L else storageRefreshKey)
+            }
+        } catch (e: IOException) {
+            value = StorageSize.Unavailable
+            return@produceState
+        }
+        downloadSizeStorage.sizes.map { sizes -> sizes[comic.id] }.distinctUntilChanged().collect { bytes ->
+            value = if (bytes == null) StorageSize.Missing else StorageSize.Ready(bytes)
+        }
+    }
     Card(
         onClick = onClick
     ) {
@@ -92,12 +128,23 @@ fun DownloadListItem(
                 )
                 Text(
                     modifier = Modifier
-                        .padding(horizontal = 8.dp)
-                        .padding(bottom = 8.dp),
+                        .padding(horizontal = 8.dp),
                     text = comic.authorList.joinToString(",").ifBlank { "暂无作者" },
                     fontSize = 12.sp,
                     lineHeight = 12.sp,
                     fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    modifier = Modifier.padding(horizontal = 8.dp).padding(bottom = 8.dp),
+                    text = when (val size = storageSize) {
+                        StorageSize.Loading -> "占用：计算中"
+                        StorageSize.Missing -> "占用：暂无文件"
+                        StorageSize.Unavailable -> "占用：统计失败，下拉重试"
+                        is StorageSize.Ready -> "占用：${Formatter.formatShortFileSize(context, size.bytes)}"
+                    },
+                    fontSize = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )

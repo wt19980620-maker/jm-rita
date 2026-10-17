@@ -8,6 +8,7 @@ import com.par9uet.jm.utils.log
 import java.net.ConnectException
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
+import kotlinx.coroutines.CancellationException
 
 open class BaseRepository(
     private val initManager: InitManager
@@ -36,6 +37,7 @@ open class BaseRepository(
     }
 
     private fun handleException(e: Exception): NetWorkResult.Error {
+        if (e is CancellationException) throw e
         log(e.stackTraceToString())
         return when (e) {
             is SocketTimeoutException -> NetWorkResult.Error("网络连接超时")

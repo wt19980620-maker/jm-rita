@@ -13,6 +13,7 @@ import com.par9uet.jm.cache.getDownloadDir
 import com.par9uet.jm.data.models.Comic
 import com.par9uet.jm.database.dao.DownloadComicDao
 import com.par9uet.jm.database.model.DownloadComic
+import com.par9uet.jm.storage.DownloadSizeStorage
 import com.par9uet.jm.worker.DownloadComicWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,7 @@ class DownloadManager(
     private val downloadComicDao: DownloadComicDao,
     private val scope: CoroutineScope,
     private val toastManager: ToastManager,
+    private val downloadSizeStorage: DownloadSizeStorage,
 ) {
     private val operations = kotlinx.coroutines.sync.Mutex()
     private val _availableBytes = MutableStateFlow(0L)
@@ -56,6 +58,7 @@ class DownloadManager(
                 toastManager.showAsync("该漫画已在下载列表中")
                 return@withLock
             }
+            downloadSizeStorage.forget(comic.id)
             downloadComicDao.insert(
                 DownloadComic(
                     id = comic.id,
@@ -117,9 +120,11 @@ class DownloadManager(
                 .all { it }
             runCatching { getCommonPicDecodeCacheDir(context, comic.id).deleteRecursively() }
             if (filesDeleted) {
+                downloadSizeStorage.forget(comic.id)
                 downloadComicDao.delete(comic)
                 toastManager.showAsync("已删除下载")
             } else {
+                downloadSizeStorage.reconcile(comic)
                 toastManager.showAsync("部分下载文件删除失败，请重试")
             }
             refreshStorage()

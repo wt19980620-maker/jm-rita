@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -37,17 +39,29 @@ class LocalSettingManager(
     val apiLineChecks = _apiLineChecks.asStateFlow()
     private val _isApiLineRefreshing = MutableStateFlow(false)
     val isApiLineRefreshing = _isApiLineRefreshing.asStateFlow()
+    private val startupApiCheck = CompletableDeferred<Unit>()
 
-    suspend fun refreshApiLines(): Boolean = apiLineRefreshMutex.withLock {
+    suspend fun awaitStartupApiCheck() {
+        withTimeoutOrNull(9000L) { startupApiCheck.await() }
+    }
+
+    suspend fun refreshApiLines(preferCurrent: Boolean = false): Boolean = apiLineRefreshMutex.withLock {
         _isApiLineRefreshing.value = true
         try {
-            val checks = coroutineScope {
+            val currentApi = _localSettingState.value.api
+            val checks = if (preferCurrent) {
+                com.par9uet.jm.repository.checkPreferredApi(
+                    currentApi, _localSettingState.value.apiList, apiLineProbe::check
+                )
+            } else coroutineScope {
                 _localSettingState.value.apiList.distinct().map { api ->
                     async(Dispatchers.IO) { apiLineProbe.check(api) }
                 }.awaitAll()
             }
             _apiLineChecks.value = checks
-            val selectedApi = ApiLineSelector.choose(_localSettingState.value.api, checks)
+            // 检测期间用户可能手动切线，不覆盖用户的新选择。
+            if (_localSettingState.value.api != currentApi) return@withLock true
+            val selectedApi = ApiLineSelector.choose(currentApi, checks)
                 ?: return@withLock false
             if (selectedApi != _localSettingState.value.api) {
                 updateApi(selectedApi)
@@ -197,6 +211,7 @@ class LocalSettingManager(
     private var appTaskInfo = AppTaskInfo(
         taskName = "加载本地 APP 设置",
         sort = 2,
+        refreshStage = 0,
     )
 
     override suspend fun init() {
@@ -206,11 +221,18 @@ class LocalSettingManager(
             localSettingStorage.get()
         }
         log("已加载本地应用设置")
-        refreshApiLines()
+        log("本地应用设置初始化结束")
+    }
+
+    override suspend fun refresh() {
         scope.launch(Dispatchers.IO) {
             refreshSourceWebsite()
         }
-        log("本地应用设置初始化结束")
+        try {
+            refreshApiLines(preferCurrent = true)
+        } finally {
+            startupApiCheck.complete(Unit)
+        }
     }
 
     override fun getAppTaskInfo(): AppTaskInfo = appTaskInfo

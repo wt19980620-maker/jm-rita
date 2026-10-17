@@ -47,7 +47,7 @@ val appModule = module {
     single { RemoteSettingRepositoryImpl(get(), get()) } bind RemoteSettingRepository::class
 
     single { UserManager(get(), get(), get(), get()) } bind AppInitTask::class
-    single { RemoteSettingManager(get()) } bind AppInitTask::class
+    single { RemoteSettingManager(get(), get()) } bind AppInitTask::class
     single { SourceDomainResolver() }
     single { ApiLineProbe() }
     single { GitHubUpdateRepository(get()) }
@@ -59,5 +59,5 @@ val appModule = module {
 
     single<Gson> { GsonBuilder().setStrictness(Strictness.LENIENT).serializeNulls().create() }
 
-    viewModel { GlobalViewModel(getAll(), get()) }
+    viewModel { GlobalViewModel(getAll(), get(), get()) }
 }

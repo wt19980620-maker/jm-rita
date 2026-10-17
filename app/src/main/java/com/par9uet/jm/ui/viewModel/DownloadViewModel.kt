@@ -8,6 +8,7 @@ import androidx.paging.cachedIn
 import com.par9uet.jm.database.dao.DownloadComicDao
 import com.par9uet.jm.database.model.DownloadComic
 import com.par9uet.jm.store.DownloadManager
+import com.par9uet.jm.utils.parseComicCode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -16,7 +17,15 @@ import kotlinx.coroutines.flow.update
 
 data class DownloadFilter(
     val status: String,
+    val query: String = "",
+    val sort: DownloadSort = DownloadSort.NEWEST,
 )
+
+enum class DownloadSort(val label: String) {
+    NEWEST("最近添加"),
+    OLDEST("最早添加"),
+    NAME("名称"),
+}
 
 class DownloadViewModel(
     private val downloadComicDao: DownloadComicDao,
@@ -31,11 +40,15 @@ class DownloadViewModel(
     val downloadFilterState = _downloadFilterState.asStateFlow()
 
     fun updateDownloadStatusFilter(status: String) {
-        _downloadFilterState.update {
-            it.copy(
-                status = status
-            )
-        }
+        _downloadFilterState.update { it.copy(status = status) }
+    }
+
+    fun updateDownloadSearchQuery(query: String) {
+        _downloadFilterState.update { it.copy(query = query) }
+    }
+
+    fun updateDownloadSort(sort: DownloadSort) {
+        _downloadFilterState.update { it.copy(sort = sort) }
     }
 
     fun retryDownload(comic: DownloadComic) {
@@ -48,6 +61,7 @@ class DownloadViewModel(
 
     @OptIn(ExperimentalCoroutinesApi::class)
     val downloadPager = _downloadFilterState.flatMapLatest { filter ->
+        val query = filter.query.trim().let { parseComicCode(it)?.toString() ?: it }
         Pager(
             config = PagingConfig(
                 pageSize = 20,
@@ -55,11 +69,7 @@ class DownloadViewModel(
                 initialLoadSize = 20
             ),
         ) {
-            if (filter.status == "downloading") {
-                downloadComicDao.getDownloadingList()
-            } else {
-                downloadComicDao.getCompleteList()
-            }
+            downloadComicDao.getDownloadList(filter.status, query, filter.sort.name)
         }.flow
     }.cachedIn(viewModelScope)
 }

@@ -16,11 +16,19 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface DownloadComicDao {
-    @Query("SELECT * FROM download_comics WHERE status IN ('pending', 'downloading', 'error', 'paused') ORDER BY createTime DESC")
-    fun getDownloadingList(): PagingSource<Int, DownloadComic>
-
-    @Query("SELECT * FROM download_comics WHERE status = 'complete' ORDER BY createTime DESC")
-    fun getCompleteList(): PagingSource<Int, DownloadComic>
+    @Query("""
+        SELECT * FROM download_comics
+        WHERE ((:status = 'downloading' AND status IN ('pending', 'downloading', 'error', 'paused'))
+            OR (:status = 'complete' AND status = 'complete'))
+            AND (:query = '' OR instr(lower(name), lower(:query)) > 0
+                OR instr(lower(authorList), lower(:query)) > 0
+                OR instr(CAST(id AS TEXT), :query) > 0)
+        ORDER BY CASE WHEN :sort = 'NEWEST' THEN createTime END DESC,
+            CASE WHEN :sort = 'OLDEST' THEN createTime END ASC,
+            CASE WHEN :sort = 'NAME' THEN name END COLLATE NOCASE ASC,
+            id DESC
+    """)
+    fun getDownloadList(status: String, query: String, sort: String): PagingSource<Int, DownloadComic>
 
     @Query("SELECT EXISTS(SELECT 1 FROM download_comics WHERE id = :comicId)")
     fun isExist(comicId: Int): Flow<Boolean>

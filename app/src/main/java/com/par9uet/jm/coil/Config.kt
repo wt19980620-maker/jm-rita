@@ -4,13 +4,14 @@ import android.content.Context
 import coil.ImageLoader
 import coil.disk.DiskCache
 import com.par9uet.jm.cache.getCommonCacheDir
+import com.par9uet.jm.cache.ORIGINAL_IMAGE_CACHE_BYTES
 
 fun createAsyncImageLoader(context: Context): ImageLoader {
     return ImageLoader.Builder(context)
         .diskCache {
             DiskCache.Builder()
                 .directory(getCommonCacheDir(context)) // 自定义目录
-                .maxSizeBytes(1024L * 1024 * 1024) // 200MB
+                .maxSizeBytes(ORIGINAL_IMAGE_CACHE_BYTES)
                 .build()
         }
         .build()
