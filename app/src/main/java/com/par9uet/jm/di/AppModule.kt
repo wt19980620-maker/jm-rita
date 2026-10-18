@@ -6,6 +6,7 @@ import com.google.gson.Strictness
 import com.par9uet.jm.repository.RemoteSettingRepository
 import com.par9uet.jm.repository.SourceDomainResolver
 import com.par9uet.jm.repository.ApiLineProbe
+import com.par9uet.jm.retrofit.ApiHttpClients
 import com.par9uet.jm.repository.GitHubUpdateRepository
 import com.par9uet.jm.repository.impl.RemoteSettingRepositoryImpl
 import com.par9uet.jm.storage.CookieStorage
@@ -49,7 +50,7 @@ val appModule = module {
     single { UserManager(get(), get(), get(), get()) } bind AppInitTask::class
     single { RemoteSettingManager(get(), get()) } bind AppInitTask::class
     single { SourceDomainResolver() }
-    single { ApiLineProbe() }
+    single { ApiLineProbe(get<ApiHttpClients>().probe) }
     single { GitHubUpdateRepository(get()) }
     single { LocalSettingManager(get(), get(), get(), get()) } bind AppInitTask::class
     single { HistorySearchManager(get()) } bind AppInitTask::class

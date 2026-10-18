@@ -1,6 +1,7 @@
 package com.par9uet.jm.di
 
 import com.par9uet.jm.retrofit.Retrofit
+import com.par9uet.jm.retrofit.ApiHttpClients
 import com.par9uet.jm.retrofit.converter.PrimitiveToRequestBodyConverterFactory
 import com.par9uet.jm.retrofit.converter.ResponseConverterFactory
 import com.par9uet.jm.retrofit.interceptor.BaseUrlInterceptor
@@ -16,8 +17,10 @@ import org.koin.dsl.module
 import retrofit2.converter.scalars.ScalarsConverterFactory
 
 val retrofitModule = module {
+    single { ApiHttpClients() }
     single {
         Retrofit(
+            get(),
             get(),
             get(),
             get(),

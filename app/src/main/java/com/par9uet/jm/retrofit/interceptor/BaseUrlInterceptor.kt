@@ -18,8 +18,12 @@ class BaseUrlInterceptor(
         return requestWithApiFallback(
             method = request.method,
             currentApi = ::getBaseUrl,
-            awaitLineCheck = { runBlocking { localSettingManager.awaitStartupApiCheck() } },
+            recoverApi = { failedApi ->
+                runBlocking { localSettingManager.recoverApi(failedApi) { chain.call().isCanceled() } }
+            },
             isCanceled = { chain.call().isCanceled() },
+            isRouteFailure = { it.code in listOf(502, 503, 504) },
+            closeFailedResponse = { it.close() },
         ) { api ->
             val baseUrl = api.toHttpUrl()
             val newUrl = request.url.newBuilder()

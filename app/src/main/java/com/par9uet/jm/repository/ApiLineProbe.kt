@@ -3,12 +3,15 @@ package com.par9uet.jm.repository
 import com.par9uet.jm.retrofit.API_TOKEN_HASH
 import com.par9uet.jm.retrofit.API_TS
 import com.par9uet.jm.retrofit.API_VERSION
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.google.gson.JsonParser
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
-import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.util.concurrent.TimeUnit
+import okhttp3.Response
+import java.io.IOException
+import kotlin.coroutines.resume
 import kotlin.time.TimeSource
 
 data class ApiLineCheck(
@@ -17,16 +20,10 @@ data class ApiLineCheck(
     val latencyMs: Long? = null,
 )
 
-class ApiLineProbe {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(3, TimeUnit.SECONDS)
-        .callTimeout(4, TimeUnit.SECONDS)
-        .build()
-
-    suspend fun check(api: String): ApiLineCheck = withContext(Dispatchers.IO) {
+class ApiLineProbe(private val client: Call.Factory) {
+    suspend fun check(api: String): ApiLineCheck {
         val baseUrl = api.toHttpUrlOrNull()
-            ?: return@withContext ApiLineCheck(api = api, isAvailable = false)
+            ?: return ApiLineCheck(api = api, isAvailable = false)
         val settingUrl = baseUrl.newBuilder().encodedPath("/setting").build()
         val request = Request.Builder()
             .url(settingUrl)
@@ -35,19 +32,28 @@ class ApiLineProbe {
             .header("token", API_TOKEN_HASH)
             .build()
         val startedAt = TimeSource.Monotonic.markNow()
-        runCatching {
-            client.newCall(request).execute().use { response ->
-                val isJson = response.body.contentType()?.subtype?.contains("json") == true
-                val body = response.body.string()
-                val isApiResponse = Regex("""\"code\"\s*:\s*200""").containsMatchIn(body)
-                ApiLineCheck(
-                    api = api,
-                    isAvailable = response.isSuccessful && isJson && isApiResponse,
-                    latencyMs = startedAt.elapsedNow().inWholeMilliseconds,
-                )
-            }
-        }.getOrElse {
-            ApiLineCheck(api = api, isAvailable = false)
+        return suspendCancellableCoroutine { continuation ->
+            val call = client.newCall(request)
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    continuation.resume(ApiLineCheck(api, false))
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        if (!continuation.isActive) return
+                        val available = runCatching {
+                            val body = response.body
+                            response.isSuccessful &&
+                                body.contentType()?.subtype?.contains("json") == true &&
+                                !body.source().request(256L * 1024 + 1) &&
+                                JsonParser.parseString(body.string()).asJsonObject["code"]?.asInt == 200
+                        }.getOrDefault(false)
+                        continuation.resume(ApiLineCheck(api, available, startedAt.elapsedNow().inWholeMilliseconds))
+                    }
+                }
+            })
         }
     }
 }

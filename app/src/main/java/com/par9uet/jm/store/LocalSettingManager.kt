@@ -6,6 +6,8 @@ import com.par9uet.jm.repository.SourceDomainResolver
 import com.par9uet.jm.repository.ApiLineCheck
 import com.par9uet.jm.repository.ApiLineProbe
 import com.par9uet.jm.repository.ApiLineSelector
+import com.par9uet.jm.repository.ApiLineRecovery
+import com.par9uet.jm.repository.checkAlternativeApis
 import com.par9uet.jm.task.AppInitTask
 import com.par9uet.jm.task.AppTaskInfo
 import com.par9uet.jm.utils.log
@@ -14,14 +16,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 
 class LocalSettingManager(
     private val localSettingStorage: LocalSettingStorage,
@@ -39,17 +40,32 @@ class LocalSettingManager(
     val apiLineChecks = _apiLineChecks.asStateFlow()
     private val _isApiLineRefreshing = MutableStateFlow(false)
     val isApiLineRefreshing = _isApiLineRefreshing.asStateFlow()
-    private val startupApiCheck = CompletableDeferred<Unit>()
+    private val apiSelectionVersion = AtomicLong()
+    private val apiRecovery = ApiLineRecovery(scope, { _localSettingState.value.api }) { failedApi ->
+        apiLineRefreshMutex.withLock {
+            if (_localSettingState.value.api == failedApi) checkApiLines(preferCurrent = true, failedApi = failedApi)
+        }
+    }
 
-    suspend fun awaitStartupApiCheck() {
-        withTimeoutOrNull(9000L) { startupApiCheck.await() }
+    suspend fun recoverApi(failedApi: String, isCanceled: () -> Boolean) {
+        apiRecovery.recover(failedApi, isCanceled)
     }
 
     suspend fun refreshApiLines(preferCurrent: Boolean = false): Boolean = apiLineRefreshMutex.withLock {
+        checkApiLines(preferCurrent)
+    }
+
+    private suspend fun checkApiLines(preferCurrent: Boolean, failedApi: String? = null): Boolean {
         _isApiLineRefreshing.value = true
         try {
-            val currentApi = _localSettingState.value.api
-            val checks = if (preferCurrent) {
+            val (currentApi, selectionVersion) = synchronized(apiSelectionVersion) {
+                _localSettingState.value.api to apiSelectionVersion.get()
+            }
+            val checks = if (failedApi != null) {
+                listOf(ApiLineCheck(failedApi, false)) + checkAlternativeApis(
+                    failedApi, _localSettingState.value.apiList, apiLineProbe::check
+                )
+            } else if (preferCurrent) {
                 com.par9uet.jm.repository.checkPreferredApi(
                     currentApi, _localSettingState.value.apiList, apiLineProbe::check
                 )
@@ -60,14 +76,16 @@ class LocalSettingManager(
             }
             _apiLineChecks.value = checks
             // 检测期间用户可能手动切线，不覆盖用户的新选择。
-            if (_localSettingState.value.api != currentApi) return@withLock true
-            val selectedApi = ApiLineSelector.choose(currentApi, checks)
-                ?: return@withLock false
-            if (selectedApi != _localSettingState.value.api) {
-                updateApi(selectedApi)
-                log("当前 API 不可用，已自动切换至：$selectedApi")
+            synchronized(apiSelectionVersion) {
+                if (apiSelectionVersion.get() != selectionVersion) return true
+                val selectedApi = ApiLineSelector.choose(currentApi, checks)
+                    ?: return false
+                if (selectedApi != _localSettingState.value.api) {
+                    updateApi(selectedApi)
+                    log("当前 API 不可用，已自动切换至：$selectedApi")
+                }
             }
-            true
+            return true
         } finally {
             _isApiLineRefreshing.value = false
         }
@@ -92,12 +110,11 @@ class LocalSettingManager(
     }
 
     fun updateApi(api: String) {
-        _localSettingState.update {
-            it.copy(
-                api = api
-            )
+        synchronized(apiSelectionVersion) {
+            apiSelectionVersion.incrementAndGet()
+            _localSettingState.update { it.copy(api = api) }
+            localSettingStorage.set(_localSettingState.value)
         }
-        localSettingStorage.set(_localSettingState.value)
     }
 
     fun updateTheme(theme: String) {
@@ -228,11 +245,7 @@ class LocalSettingManager(
         scope.launch(Dispatchers.IO) {
             refreshSourceWebsite()
         }
-        try {
-            refreshApiLines(preferCurrent = true)
-        } finally {
-            startupApiCheck.complete(Unit)
-        }
+        refreshApiLines(preferCurrent = true)
     }
 
     override fun getAppTaskInfo(): AppTaskInfo = appTaskInfo

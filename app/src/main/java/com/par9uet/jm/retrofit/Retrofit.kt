@@ -10,10 +10,8 @@ import com.par9uet.jm.storage.CookieStorage
 import com.par9uet.jm.task.AppInitTask
 import com.par9uet.jm.task.AppTaskInfo
 import com.par9uet.jm.utils.log
-import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.scalars.ScalarsConverterFactory
-import java.util.concurrent.TimeUnit
 
 class Retrofit(
     baseUrlInterceptor: BaseUrlInterceptor,
@@ -23,7 +21,8 @@ class Retrofit(
     private val scalarsConverterFactory: ScalarsConverterFactory,
     private val responseConverterFactory: ResponseConverterFactory,
     private val primitiveToRequestBodyConverterFactory: PrimitiveToRequestBodyConverterFactory,
-    private val cookieStorage: CookieStorage
+    private val cookieStorage: CookieStorage,
+    httpClients: ApiHttpClients,
 ) : AppInitTask {
     private val appTaskInfo = AppTaskInfo(
         taskName = "Retrofit 配置",
@@ -31,14 +30,11 @@ class Retrofit(
     )
     private val cookieJar = ScopedCookieJar { cookieStorage.set(it) }
     private val okHttpClient =
-        OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+        httpClients.api.newBuilder()
             .addInterceptor(initInterceptor)
+            .addInterceptor(toastInterceptor)
             .addInterceptor(baseUrlInterceptor)
             .addInterceptor(tokenInterceptor)
-            .addInterceptor(toastInterceptor)
             .cookieJar(cookieJar)
             .build()
     private val retrofit: Retrofit by lazy {
